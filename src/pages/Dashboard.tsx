@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Plane, Briefcase, ShoppingBag, Code, Wrench, Shield } from "lucide-react";
 import { motion } from "framer-motion";
+import auth0Shield from "@/assets/auth0-shield.png";
 
 const iconMap: Record<string, React.ElementType> = {
   Plane, Briefcase, ShoppingBag, Code, Wrench,
@@ -23,10 +24,8 @@ export default function Dashboard() {
       <header className="border-b border-border">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-auth0">
-              <Shield className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold tracking-tight">Auth0 AI Demos</span>
+            <img src={auth0Shield} alt="Auth0" className="h-8 w-8 invert" />
+            <span className="text-lg font-bold tracking-tight text-foreground">Auth0 AI Demos</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">{user?.email}</span>
@@ -42,10 +41,16 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {/* Hero gradient */}
+      <div className="pointer-events-none absolute left-0 right-0 top-16 h-64 gradient-hero opacity-40" />
+
       {/* Main */}
-      <main className="mx-auto max-w-7xl px-6 py-12">
+      <main className="relative mx-auto max-w-7xl px-6 py-12">
         <div className="mb-10">
-          <h1 className="text-3xl font-bold tracking-tight">Demo Launcher</h1>
+          <Badge variant="outline" className="mb-3 text-xs border-primary/40 text-primary">
+            NEW — Auth0 for AI Agents
+          </Badge>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Demo Launcher</h1>
           <p className="mt-2 text-muted-foreground">
             Choose a demo to experience Auth0-secured AI agents in action.
           </p>
@@ -62,7 +67,7 @@ export default function Dashboard() {
                 transition={{ duration: 0.4, delay: i * 0.08 }}
               >
                 <Card
-                  className="group cursor-pointer transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
+                  className="group cursor-pointer transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
                   onClick={() => navigate(`/demo/${template.id}`)}
                 >
                   <CardHeader>

@@ -3,7 +3,7 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { getTemplateById, generateEnvId } from "@/lib/demo-templates";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, RotateCcw, Shield, Send } from "lucide-react";
+import { ArrowLeft, RotateCcw, Shield, Send, Share2, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -11,6 +11,7 @@ import { ApprovalModal, type ApprovalRequest } from "@/components/demo/ApprovalM
 import { ToolCallCard, type ToolCallDisplay } from "@/components/demo/ToolCallCard";
 import { EventTimeline, type TimelineEvent } from "@/components/demo/EventTimeline";
 import { toast } from "sonner";
+import auth0Shield from "@/assets/auth0-shield.png";
 
 interface ChatMessage {
   id: string;
@@ -47,11 +48,11 @@ export default function DemoPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [pendingToolContext, setPendingToolContext] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
 
   const envId = user?.sub && templateId ? generateEnvId(user.sub, templateId) : "unknown";
 
@@ -59,7 +60,6 @@ export default function DemoPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Add initial auth event
   useEffect(() => {
     if (user?.email) {
       addTimelineEvent("auth", "User Authenticated", `${user.email} via Auth0`, "success");
@@ -91,7 +91,7 @@ export default function DemoPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Template not found</h1>
+          <h1 className="text-2xl font-bold text-foreground">Template not found</h1>
           <Button variant="ghost" className="mt-4" onClick={() => navigate("/")}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
           </Button>
@@ -140,10 +140,8 @@ export default function DemoPage() {
   ) => {
     const toolCalls: ToolCallDisplay[] = [];
 
-    // Process tool calls
     for (const tc of data.tool_calls || []) {
       if (tc.type === "executed") {
-        // Auto-executed (no approval needed)
         toolCalls.push({
           id: crypto.randomUUID(),
           toolName: tc.tool_name,
@@ -156,7 +154,6 @@ export default function DemoPage() {
         });
         addTimelineEvent("tool_call", `${tc.tool_name} executed`, `Scopes: ${tc.scopes.join(", ")}`, "success");
       } else if (tc.type === "approval_required") {
-        // Needs approval — show modal
         toolCalls.push({
           id: crypto.randomUUID(),
           toolName: tc.tool_name,
@@ -170,7 +167,6 @@ export default function DemoPage() {
 
         addTimelineEvent("approval", `Approval requested: ${tc.tool_name}`, tc.tool_description, "pending", "Async Authorization");
 
-        // Show approval modal
         const approvalReq: ApprovalRequest = {
           id: crypto.randomUUID(),
           toolName: tc.tool_name,
@@ -181,7 +177,6 @@ export default function DemoPage() {
           auth0Explanation: "This action requires explicit human approval. Auth0's Async Authorization pattern ensures AI agents cannot perform sensitive actions without user consent.",
         };
 
-        // Store context for after approval
         setPendingToolContext({
           toolCall: tc,
           chatHistory,
@@ -193,7 +188,6 @@ export default function DemoPage() {
       }
     }
 
-    // If we have executed tool results, send them back to the agent for narration
     if (toolCalls.length > 0 && toolCalls.every((tc) => tc.status === "completed")) {
       const executedResults = (data.tool_calls || [])
         .filter((tc: any) => tc.type === "executed")
@@ -256,7 +250,6 @@ export default function DemoPage() {
         ]);
         addTimelineEvent("message", "Agent response", result.content?.slice(0, 60));
       } else {
-        // Add partial message while awaiting approval
         if (result.content) {
           setMessages((prev) => [
             ...prev,
@@ -310,7 +303,6 @@ export default function DemoPage() {
             : tc
         );
 
-        // Process any new tool calls from follow-up
         for (const tc of followUp.tool_calls || []) {
           if (tc.type === "executed") {
             toolCalls.push({
@@ -347,10 +339,44 @@ export default function DemoPage() {
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
+    setIsResetting(true);
+    try {
+      // Clear backend state
+      const RESET_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-environment`;
+      await fetch(RESET_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ env_id: envId }),
+      });
+    } catch (e) {
+      console.error("Reset error:", e);
+    }
+    // Clear frontend state
     setMessages([]);
     setTimelineEvents([]);
+    setPendingToolContext(null);
+    setApprovalRequest(null);
+    setIsResetting(false);
     addTimelineEvent("auth", "Environment reset", `Template: ${template.name}`, "success");
+    toast.success("Environment reset");
+  };
+
+  const handleShare = () => {
+    // Encode a snapshot of the timeline + messages for sharing
+    const snapshot = {
+      t: template.id,
+      ts: Date.now(),
+      events: timelineEvents.slice(0, 20).map((e) => ({ type: e.type, title: e.title, status: e.status })),
+      msgCount: messages.length,
+    };
+    const encoded = btoa(JSON.stringify(snapshot));
+    const url = `${window.location.origin}/demo/${template.id}?snapshot=${encoded}`;
+    navigator.clipboard.writeText(url);
+    toast.success("Snapshot link copied to clipboard");
   };
 
   return (
@@ -361,8 +387,9 @@ export default function DemoPage() {
           <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
+          <img src={auth0Shield} alt="Auth0" className="h-6 w-6 invert" />
           <div>
-            <h1 className="text-base font-semibold">{template.name}</h1>
+            <h1 className="text-base font-semibold text-foreground">{template.name}</h1>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>env: {envId}</span>
               <span>•</span>
@@ -372,13 +399,17 @@ export default function DemoPage() {
         </div>
         <div className="flex items-center gap-2">
           {template.auth0Features.map((f) => (
-            <Badge key={f.id} variant="outline" className="hidden text-xs sm:inline-flex">
+            <Badge key={f.id} variant="outline" className="hidden text-xs sm:inline-flex border-primary/30 text-primary">
               <Shield className="mr-1 h-3 w-3" />
               {f.name}
             </Badge>
           ))}
-          <Button variant="ghost" size="sm" onClick={handleReset}>
-            <RotateCcw className="mr-1 h-4 w-4" /> Reset
+          <Button variant="ghost" size="sm" onClick={handleShare}>
+            <Share2 className="mr-1 h-4 w-4" /> Share
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleReset} disabled={isResetting}>
+            {isResetting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-1 h-4 w-4" />}
+            Reset
           </Button>
         </div>
       </header>
@@ -395,7 +426,7 @@ export default function DemoPage() {
                   <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: `${template.color}15` }}>
                     <Shield className="h-8 w-8" style={{ color: template.color }} />
                   </div>
-                  <h2 className="text-xl font-semibold">{template.name}</h2>
+                  <h2 className="text-xl font-semibold text-foreground">{template.name}</h2>
                   <p className="mt-2 max-w-md text-sm text-muted-foreground">{template.knowledgePack}</p>
                   <div className="mt-6 flex flex-wrap justify-center gap-2">
                     {template.tools.map((tool) => (
@@ -434,7 +465,6 @@ export default function DemoPage() {
                         )}
                       </div>
 
-                      {/* Tool Call Cards */}
                       {msg.toolCalls && msg.toolCalls.length > 0 && (
                         <div className="space-y-2">
                           {msg.toolCalls.map((tc) => (
