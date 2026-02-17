@@ -14,7 +14,237 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agent_memory: {
+        Row: {
+          content: string
+          created_at: string
+          env_id: string
+          id: string
+          metadata: Json | null
+          role: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          env_id: string
+          id?: string
+          metadata?: Json | null
+          role: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          env_id?: string
+          id?: string
+          metadata?: Json | null
+          role?: string
+        }
+        Relationships: []
+      }
+      approval_requests: {
+        Row: {
+          action_summary: string
+          auth0_feature: string | null
+          created_at: string
+          data_summary: Json | null
+          decided_at: string | null
+          decision: string | null
+          env_id: string
+          id: string
+          tool_id: string
+        }
+        Insert: {
+          action_summary: string
+          auth0_feature?: string | null
+          created_at?: string
+          data_summary?: Json | null
+          decided_at?: string | null
+          decision?: string | null
+          env_id: string
+          id?: string
+          tool_id: string
+        }
+        Update: {
+          action_summary?: string
+          auth0_feature?: string | null
+          created_at?: string
+          data_summary?: Json | null
+          decided_at?: string | null
+          decision?: string | null
+          env_id?: string
+          id?: string
+          tool_id?: string
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          auth0_sub: string | null
+          created_at: string
+          env_id: string
+          event_data: Json | null
+          event_type: string
+          id: string
+        }
+        Insert: {
+          auth0_sub?: string | null
+          created_at?: string
+          env_id: string
+          event_data?: Json | null
+          event_type: string
+          id?: string
+        }
+        Update: {
+          auth0_sub?: string | null
+          created_at?: string
+          env_id?: string
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      demo_environments: {
+        Row: {
+          auth0_sub: string
+          config_overrides: Json | null
+          created_at: string
+          env_id: string
+          env_type: string
+          id: string
+          template_id: string
+          updated_at: string
+        }
+        Insert: {
+          auth0_sub: string
+          config_overrides?: Json | null
+          created_at?: string
+          env_id: string
+          env_type?: string
+          id?: string
+          template_id: string
+          updated_at?: string
+        }
+        Update: {
+          auth0_sub?: string
+          config_overrides?: Json | null
+          created_at?: string
+          env_id?: string
+          env_type?: string
+          id?: string
+          template_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demo_environments_auth0_sub_fkey"
+            columns: ["auth0_sub"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["auth0_sub"]
+          },
+          {
+            foreignKeyName: "demo_environments_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "demo_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      demo_templates: {
+        Row: {
+          color: string | null
+          config: Json
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          color?: string | null
+          config?: Json
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id: string
+          name: string
+        }
+        Update: {
+          color?: string | null
+          config?: Json
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          auth0_sub: string
+          created_at: string
+          demo_mode: string | null
+          email: string | null
+          id: string
+          name: string | null
+          picture: string | null
+          updated_at: string
+        }
+        Insert: {
+          auth0_sub: string
+          created_at?: string
+          demo_mode?: string | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          picture?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auth0_sub?: string
+          created_at?: string
+          demo_mode?: string | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          picture?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tool_state: {
+        Row: {
+          created_at: string
+          env_id: string
+          id: string
+          input: Json | null
+          output: Json | null
+          status: string
+          tool_id: string
+        }
+        Insert: {
+          created_at?: string
+          env_id: string
+          id?: string
+          input?: Json | null
+          output?: Json | null
+          status?: string
+          tool_id: string
+        }
+        Update: {
+          created_at?: string
+          env_id?: string
+          id?: string
+          input?: Json | null
+          output?: Json | null
+          status?: string
+          tool_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

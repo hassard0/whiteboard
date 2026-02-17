@@ -1,1 +1,7 @@
 project_id = "juaztmtwobldemedoekp"
+
+[functions.sync-profile]
+verify_jwt = false
+
+[functions.demo-chat]
+verify_jwt = false
