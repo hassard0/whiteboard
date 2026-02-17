@@ -1,16 +1,17 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import { Button } from "@/components/ui/button";
-import { Shield, Bot, Zap } from "lucide-react";
+import { Shield, Bot, Zap, Lock } from "lucide-react";
 import { motion } from "framer-motion";
+import auth0Shield from "@/assets/auth0-shield.png";
 
 export function LoginPage() {
   const { loginWithRedirect } = useAuth0();
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
-      {/* Glow effect */}
+    <div className="relative flex min-h-screen flex-col items-center justify-center bg-background px-6">
+      {/* Purple gradient glow — matches auth0.com hero */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-primary/10 blur-[120px]" />
+        <div className="absolute left-1/2 top-0 -translate-x-1/2 h-[700px] w-[900px] rounded-full gradient-hero opacity-80" />
       </div>
 
       <motion.div
@@ -19,18 +20,15 @@ export function LoginPage() {
         transition={{ duration: 0.6 }}
         className="relative z-10 flex max-w-lg flex-col items-center text-center"
       >
-        {/* Auth0 Logo placeholder */}
+        {/* Auth0 brand mark */}
         <div className="mb-8 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl gradient-auth0">
-            <Shield className="h-7 w-7 text-primary-foreground" />
-          </div>
-          <span className="text-2xl font-bold tracking-tight">Auth0 AI Demos</span>
+          <img src={auth0Shield} alt="Auth0" className="h-10 w-10 invert" />
+          <span className="text-2xl font-bold tracking-tight text-foreground">Auth0 AI Demos</span>
         </div>
 
-        <h1 className="mb-4 text-4xl font-bold leading-tight tracking-tight md:text-5xl">
-          Identity is the{" "}
-          <span className="text-gradient-auth0">control plane</span>
-          {" "}for AI
+        <h1 className="mb-4 text-4xl font-bold leading-tight tracking-tight text-foreground md:text-5xl">
+          Secure AI agents, humans,{" "}
+          <span className="text-gradient-auth0">and whatever comes next</span>
         </h1>
 
         <p className="mb-8 max-w-md text-lg text-muted-foreground">
@@ -40,9 +38,9 @@ export function LoginPage() {
         <Button
           size="lg"
           onClick={() => loginWithRedirect()}
-          className="gradient-auth0 glow-orange h-12 px-8 text-base font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+          className="gradient-auth0 glow-purple h-12 px-8 text-base font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
         >
-          Sign in with Auth0
+          Start building for free
         </Button>
 
         {/* Feature badges */}
@@ -51,6 +49,7 @@ export function LoginPage() {
             { icon: Shield, label: "Token Vault" },
             { icon: Bot, label: "AI Agents" },
             { icon: Zap, label: "Async Auth" },
+            { icon: Lock, label: "Fine-Grained Auth" },
           ].map(({ icon: Icon, label }) => (
             <div
               key={label}

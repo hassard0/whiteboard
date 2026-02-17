@@ -6,56 +6,58 @@
 
 @layer base {
   :root {
-    --background: 222 47% 6%;
-    --foreground: 210 40% 96%;
+    --background: 0 0% 2%;
+    --foreground: 0 0% 96%;
 
-    --card: 222 47% 9%;
-    --card-foreground: 210 40% 96%;
+    --card: 240 6% 6%;
+    --card-foreground: 0 0% 96%;
 
-    --popover: 222 47% 9%;
-    --popover-foreground: 210 40% 96%;
+    --popover: 240 6% 6%;
+    --popover-foreground: 0 0% 96%;
 
-    --primary: 18 95% 54%;
+    --primary: 262 83% 58%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 222 30% 14%;
-    --secondary-foreground: 210 40% 96%;
+    --secondary: 240 6% 10%;
+    --secondary-foreground: 0 0% 96%;
 
-    --muted: 222 30% 14%;
-    --muted-foreground: 215 20% 55%;
+    --muted: 240 5% 12%;
+    --muted-foreground: 240 5% 55%;
 
-    --accent: 222 30% 18%;
-    --accent-foreground: 210 40% 96%;
+    --accent: 240 6% 14%;
+    --accent-foreground: 0 0% 96%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 222 30% 18%;
-    --input: 222 30% 18%;
-    --ring: 18 95% 54%;
+    --border: 240 6% 14%;
+    --input: 240 6% 14%;
+    --ring: 262 83% 58%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 222 47% 8%;
-    --sidebar-foreground: 210 40% 90%;
-    --sidebar-primary: 18 95% 54%;
+    --sidebar-background: 240 6% 4%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 262 83% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 30% 14%;
-    --sidebar-accent-foreground: 210 40% 96%;
-    --sidebar-border: 222 30% 16%;
-    --sidebar-ring: 18 95% 54%;
+    --sidebar-accent: 240 6% 12%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 240 6% 12%;
+    --sidebar-ring: 262 83% 58%;
 
-    /* Auth0 custom tokens */
-    --auth0-navy: 222 47% 6%;
-    --auth0-orange: 18 95% 54%;
-    --auth0-orange-glow: 18 100% 62%;
+    /* Auth0 brand tokens */
+    --auth0-black: 0 0% 2%;
+    --auth0-purple: 262 83% 58%;
+    --auth0-purple-glow: 270 90% 65%;
+    --auth0-indigo: 235 70% 55%;
+    --auth0-violet: 280 70% 55%;
     --auth0-teal: 174 62% 47%;
-    --auth0-purple: 262 60% 55%;
-    --auth0-surface: 222 47% 9%;
-    --auth0-surface-hover: 222 30% 14%;
+    --auth0-surface: 240 6% 6%;
+    --auth0-surface-hover: 240 6% 10%;
 
-    --gradient-auth0: linear-gradient(135deg, hsl(18 95% 54%), hsl(18 100% 62%));
-    --shadow-glow: 0 0 30px -5px hsl(18 95% 54% / 0.3);
+    --gradient-auth0: linear-gradient(135deg, hsl(262 83% 58%), hsl(280 70% 55%));
+    --gradient-hero: linear-gradient(180deg, hsl(262 83% 58% / 0.3) 0%, hsl(235 70% 55% / 0.15) 50%, transparent 100%);
+    --shadow-glow: 0 0 40px -5px hsl(262 83% 58% / 0.35);
   }
 }
 
@@ -76,18 +78,26 @@
 
 @layer utilities {
   .gradient-auth0 {
-    background: linear-gradient(135deg, hsl(var(--auth0-orange)), hsl(var(--auth0-orange-glow)));
+    background: linear-gradient(135deg, hsl(var(--auth0-purple)), hsl(var(--auth0-purple-glow)));
+  }
+
+  .gradient-hero {
+    background: linear-gradient(180deg, hsl(262 83% 58% / 0.25) 0%, hsl(235 70% 55% / 0.1) 50%, transparent 100%);
   }
 
   .text-gradient-auth0 {
-    background: linear-gradient(135deg, hsl(var(--auth0-orange)), hsl(var(--auth0-orange-glow)));
+    background: linear-gradient(135deg, hsl(var(--auth0-purple)), hsl(var(--auth0-purple-glow)));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
+  .glow-purple {
+    box-shadow: 0 0 40px -5px hsl(262 83% 58% / 0.35);
+  }
+
   .glow-orange {
-    box-shadow: 0 0 30px -5px hsl(18 95% 54% / 0.3);
+    box-shadow: 0 0 30px -5px hsl(262 83% 58% / 0.3);
   }
 
   .glass-panel {

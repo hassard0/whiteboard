@@ -32,7 +32,7 @@ export const DEMO_TEMPLATES: DemoTemplate[] = [
     name: "AI Travel Agent",
     description: "Books flights & hotels, shows delegated access and approval gates for purchases.",
     icon: "Plane",
-    color: "hsl(18 95% 54%)",
+    color: "hsl(262 83% 58%)",
     tools: [
       { id: "search_flights", name: "Search Flights", description: "Search available flights", scopes: ["flights:read"], requiresApproval: false, mockDelay: 1500 },
       { id: "book_flight", name: "Book Flight", description: "Book a flight on behalf of user", scopes: ["flights:write", "payments:charge"], requiresApproval: true, mockDelay: 2000 },

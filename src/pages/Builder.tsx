@@ -1,15 +1,17 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
-import { getTemplateById, type DemoTemplate, type DemoTool } from "@/lib/demo-templates";
+import { getTemplateById, generateEnvId } from "@/lib/demo-templates";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Eye, Shield, Wrench, Save, RotateCcw } from "lucide-react";
-import { useState, useCallback } from "react";
+import { ArrowLeft, Eye, Shield, Wrench, Save, RotateCcw, Loader2 } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import auth0Shield from "@/assets/auth0-shield.png";
 
 export default function BuilderPage() {
   const { templateId } = useParams<{ templateId: string }>();
@@ -31,12 +33,45 @@ export default function BuilderPage() {
 
   const [customPrompt, setCustomPrompt] = useState("");
   const [customKnowledge, setCustomKnowledge] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const envId = user?.sub && templateId ? generateEnvId(user.sub, templateId) : "";
+
+  // Load saved config from database
+  useEffect(() => {
+    if (!user?.sub || !templateId) { setLoading(false); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("demo_environments")
+        .select("config_overrides")
+        .eq("env_id", envId)
+        .maybeSingle();
+
+      if (data?.config_overrides) {
+        const cfg = data.config_overrides as any;
+        if (cfg.enabledTools) {
+          const map: Record<string, boolean> = {};
+          baseTemplate?.tools.forEach((t) => { map[t.id] = cfg.enabledTools.includes(t.id); });
+          setEnabledTools(map);
+        }
+        if (cfg.enabledFeatures) {
+          const map: Record<string, boolean> = {};
+          baseTemplate?.auth0Features.forEach((f) => { map[f.id] = cfg.enabledFeatures.includes(f.id); });
+          setEnabledFeatures(map);
+        }
+        if (cfg.customPrompt) setCustomPrompt(cfg.customPrompt);
+        if (cfg.customKnowledge) setCustomKnowledge(cfg.customKnowledge);
+      }
+      setLoading(false);
+    })();
+  }, [user?.sub, templateId]);
 
   if (!baseTemplate) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Template not found</h1>
+          <h1 className="text-2xl font-bold text-foreground">Template not found</h1>
           <Button variant="ghost" className="mt-4" onClick={() => navigate("/")}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Back
           </Button>
@@ -45,15 +80,39 @@ export default function BuilderPage() {
     );
   }
 
+  const buildConfig = () => ({
+    enabledTools: Object.entries(enabledTools).filter(([, v]) => v).map(([k]) => k),
+    enabledFeatures: Object.entries(enabledFeatures).filter(([, v]) => v).map(([k]) => k),
+    customPrompt,
+    customKnowledge,
+  });
+
+  const handleSave = async () => {
+    if (!user?.sub || !templateId) return;
+    setSaving(true);
+    try {
+      const config = buildConfig();
+      const { error } = await supabase
+        .from("demo_environments")
+        .upsert({
+          env_id: envId,
+          auth0_sub: user.sub,
+          template_id: templateId,
+          config_overrides: config as any,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "env_id" });
+
+      if (error) throw error;
+      toast.success("Configuration saved");
+    } catch (e: any) {
+      toast.error("Failed to save: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handlePreview = () => {
-    // Build custom config and pass via state
-    const customConfig = {
-      enabledTools: Object.entries(enabledTools).filter(([, v]) => v).map(([k]) => k),
-      enabledFeatures: Object.entries(enabledFeatures).filter(([, v]) => v).map(([k]) => k),
-      customPrompt,
-      customKnowledge,
-    };
-    navigate(`/demo/${templateId}`, { state: { builderConfig: customConfig } });
+    navigate(`/demo/${templateId}`, { state: { builderConfig: buildConfig() } });
   };
 
   const handleReset = () => {
@@ -67,6 +126,14 @@ export default function BuilderPage() {
   const activeToolCount = Object.values(enabledTools).filter(Boolean).length;
   const activeFeatureCount = Object.values(enabledFeatures).filter(Boolean).length;
 
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -78,8 +145,8 @@ export default function BuilderPage() {
             </Button>
             <div>
               <div className="flex items-center gap-2">
-                <Wrench className="h-4 w-4 text-primary" />
-                <h1 className="text-sm font-semibold">Builder Mode</h1>
+                <img src={auth0Shield} alt="Auth0" className="h-5 w-5 invert" />
+                <h1 className="text-sm font-semibold text-foreground">Builder Mode</h1>
               </div>
               <span className="text-xs text-muted-foreground">{baseTemplate.name}</span>
             </div>
@@ -87,6 +154,10 @@ export default function BuilderPage() {
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={handleReset}>
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+              Save
             </Button>
             <Button size="sm" onClick={handlePreview} className="gradient-auth0 text-primary-foreground">
               <Eye className="mr-1.5 h-3.5 w-3.5" /> Preview Demo
@@ -116,7 +187,7 @@ export default function BuilderPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{tool.name}</span>
+                      <span className="text-sm font-medium text-foreground">{tool.name}</span>
                       {tool.requiresApproval && (
                         <Badge variant="outline" className="text-[10px] border-primary/30 text-primary h-4 px-1.5">
                           <Shield className="mr-0.5 h-2.5 w-2.5" /> Approval
@@ -160,7 +231,7 @@ export default function BuilderPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <Shield className="h-3.5 w-3.5 text-primary" />
-                      <span className="text-sm font-medium">{feature.name}</span>
+                      <span className="text-sm font-medium text-foreground">{feature.name}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{feature.description}</p>
                   </div>
