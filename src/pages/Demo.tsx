@@ -32,20 +32,53 @@ export default function DemoPage() {
   const baseTemplate = getTemplateById(templateId || "");
 
   const builderConfig = (location.state as any)?.builderConfig;
-  const template = baseTemplate ? {
-    ...baseTemplate,
-    tools: builderConfig?.enabledTools
-      ? baseTemplate.tools.filter((t) => builderConfig.enabledTools.includes(t.id))
-      : baseTemplate.tools,
-    auth0Features: builderConfig?.enabledFeatures
-      ? baseTemplate.auth0Features.filter((f) => builderConfig.enabledFeatures.includes(f.id))
-      : baseTemplate.auth0Features,
-    systemPromptParts: [
-      ...baseTemplate.systemPromptParts,
-      ...(builderConfig?.customPrompt ? [builderConfig.customPrompt] : []),
-    ],
-    knowledgePack: baseTemplate.knowledgePack + (builderConfig?.customKnowledge ? "\n\n" + builderConfig.customKnowledge : ""),
-  } : null;
+  const customDemo = (location.state as any)?.customDemo;
+
+  // Build the template — support custom wizard demos, builder configs, or pre-built
+  const template = customDemo
+    ? {
+        id: templateId || "custom",
+        name: customDemo.name || "Custom Demo",
+        description: customDemo.description || "",
+        icon: customDemo.icon || "Sparkles",
+        color: customDemo.color || "hsl(262 83% 58%)",
+        tools: customDemo.tools || [],
+        auth0Features: customDemo.auth0Features || [],
+        systemPromptParts: customDemo.systemPromptParts || [],
+        knowledgePack: customDemo.knowledgePack || "",
+      }
+    : baseTemplate
+    ? {
+        ...baseTemplate,
+        tools: builderConfig?.enabledTools
+          ? baseTemplate.tools.filter((t) => builderConfig.enabledTools.includes(t.id))
+          : baseTemplate.tools,
+        auth0Features: builderConfig?.enabledFeatures
+          ? baseTemplate.auth0Features.filter((f) => builderConfig.enabledFeatures.includes(f.id))
+          : baseTemplate.auth0Features,
+        systemPromptParts: [
+          ...baseTemplate.systemPromptParts,
+          ...(builderConfig?.customPrompt ? [builderConfig.customPrompt] : []),
+        ],
+        knowledgePack: baseTemplate.knowledgePack + (builderConfig?.customKnowledge ? "\n\n" + builderConfig.customKnowledge : ""),
+      }
+    : null;
+
+  // Build autopilot script from custom demo or pre-built
+  const customAutopilot = customDemo?.autopilotSteps?.length
+    ? {
+        templateId: templateId || "custom",
+        title: `${customDemo.name} Walkthrough`,
+        description: customDemo.description || "",
+        steps: customDemo.autopilotSteps.map((s: any, i: number) => ({
+          id: `step-${i}`,
+          label: s.label,
+          userMessage: s.message,
+          explanation: s.explanation,
+          highlightFeature: s.feature,
+        })),
+      }
+    : undefined;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -58,7 +91,7 @@ export default function DemoPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Autopilot state
-  const autopilotScript = templateId ? AUTOPILOT_SCRIPTS[templateId] : undefined;
+  const autopilotScript = customAutopilot || (templateId ? AUTOPILOT_SCRIPTS[templateId] : undefined);
   const [autopilotActive, setAutopilotActive] = useState(false);
   const [autopilotStep, setAutopilotStep] = useState(0);
   const [autopilotWaiting, setAutopilotWaiting] = useState(false);
