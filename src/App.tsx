@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import DemoPage from "./pages/Demo";
 import BuilderPage from "./pages/Builder";
+import WizardPage from "./pages/Wizard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <BuilderPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/wizard"
+              element={
+                <ProtectedRoute>
+                  <WizardPage />
                 </ProtectedRoute>
               }
             />
