@@ -1,6 +1,7 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import { getTemplateById, generateEnvId } from "@/lib/demo-templates";
+import { AUTOPILOT_SCRIPTS } from "@/lib/autopilot-scripts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, RotateCcw, Shield, Send, Share2, Loader2 } from "lucide-react";
@@ -10,6 +11,8 @@ import ReactMarkdown from "react-markdown";
 import { ApprovalModal, type ApprovalRequest } from "@/components/demo/ApprovalModal";
 import { ToolCallCard, type ToolCallDisplay } from "@/components/demo/ToolCallCard";
 import { EventTimeline, type TimelineEvent } from "@/components/demo/EventTimeline";
+import { AutopilotControls } from "@/components/demo/AutopilotControls";
+import { ArchitectureShelf } from "@/components/demo/ArchitectureShelf";
 import { toast } from "sonner";
 import auth0Shield from "@/assets/auth0-shield.png";
 
@@ -28,7 +31,6 @@ export default function DemoPage() {
   const { user } = useAuth0();
   const baseTemplate = getTemplateById(templateId || "");
 
-  // Apply builder config if coming from builder mode
   const builderConfig = (location.state as any)?.builderConfig;
   const template = baseTemplate ? {
     ...baseTemplate,
@@ -52,7 +54,14 @@ export default function DemoPage() {
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [pendingToolContext, setPendingToolContext] = useState<any>(null);
+  const [lastToolCall, setLastToolCall] = useState<string | undefined>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Autopilot state
+  const autopilotScript = templateId ? AUTOPILOT_SCRIPTS[templateId] : undefined;
+  const [autopilotActive, setAutopilotActive] = useState(false);
+  const [autopilotStep, setAutopilotStep] = useState(0);
+  const [autopilotWaiting, setAutopilotWaiting] = useState(false);
 
   const envId = user?.sub && templateId ? generateEnvId(user.sub, templateId) : "unknown";
 
@@ -105,7 +114,6 @@ export default function DemoPage() {
     pendingApprovals?: any[],
   ) => {
     const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/demo-chat`;
-
     const resp = await fetch(CHAT_URL, {
       method: "POST",
       headers: {
@@ -152,6 +160,7 @@ export default function DemoPage() {
           result: JSON.stringify(tc.result, null, 2),
           timestamp: new Date(),
         });
+        setLastToolCall(tc.tool_name);
         addTimelineEvent("tool_call", `${tc.tool_name} executed`, `Scopes: ${tc.scopes.join(", ")}`, "success");
       } else if (tc.type === "approval_required") {
         toolCalls.push({
@@ -210,20 +219,20 @@ export default function DemoPage() {
     return { content: data.content, toolCalls, awaitingApproval: false };
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const sendMessage = async (messageText: string) => {
+    if (!messageText.trim() || isLoading) return;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: input.trim(),
+      content: messageText.trim(),
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
 
-    addTimelineEvent("message", "User message", input.trim().slice(0, 60));
+    addTimelineEvent("message", "User message", messageText.trim().slice(0, 60));
 
     try {
       const chatHistory = [...messages, userMsg].map((m) => ({
@@ -232,10 +241,10 @@ export default function DemoPage() {
       }));
 
       const data = await callAgent(chatHistory);
-      if (!data) { setIsLoading(false); return; }
+      if (!data) { setIsLoading(false); setAutopilotWaiting(false); return; }
 
       const result = await processAgentResponse(data, chatHistory);
-      if (!result) { setIsLoading(false); return; }
+      if (!result) { setIsLoading(false); setAutopilotWaiting(false); return; }
 
       if (!result.awaitingApproval) {
         setMessages((prev) => [
@@ -270,14 +279,19 @@ export default function DemoPage() {
         { id: crypto.randomUUID(), role: "assistant", content: "Sorry, I encountered an error. Please try again.", timestamp: new Date() },
       ]);
     } finally {
-      if (!approvalRequest) setIsLoading(false);
+      if (!approvalRequest) {
+        setIsLoading(false);
+        setAutopilotWaiting(false);
+      }
     }
   };
+
+  const handleSend = () => sendMessage(input);
 
   const handleApprovalDecision = async (requestId: string, decision: "approved" | "denied") => {
     setApprovalRequest(null);
     const ctx = pendingToolContext;
-    if (!ctx) { setIsLoading(false); return; }
+    if (!ctx) { setIsLoading(false); setAutopilotWaiting(false); return; }
 
     addTimelineEvent(
       "approval",
@@ -315,6 +329,7 @@ export default function DemoPage() {
               result: JSON.stringify(tc.result, null, 2),
               timestamp: new Date(),
             });
+            setLastToolCall(tc.tool_name);
           }
         }
 
@@ -336,13 +351,13 @@ export default function DemoPage() {
     } finally {
       setPendingToolContext(null);
       setIsLoading(false);
+      setAutopilotWaiting(false);
     }
   };
 
   const handleReset = async () => {
     setIsResetting(true);
     try {
-      // Clear backend state
       const RESET_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-environment`;
       await fetch(RESET_URL, {
         method: "POST",
@@ -355,18 +370,20 @@ export default function DemoPage() {
     } catch (e) {
       console.error("Reset error:", e);
     }
-    // Clear frontend state
     setMessages([]);
     setTimelineEvents([]);
     setPendingToolContext(null);
     setApprovalRequest(null);
+    setAutopilotActive(false);
+    setAutopilotStep(0);
+    setAutopilotWaiting(false);
+    setLastToolCall(undefined);
     setIsResetting(false);
     addTimelineEvent("auth", "Environment reset", `Template: ${template.name}`, "success");
     toast.success("Environment reset");
   };
 
   const handleShare = () => {
-    // Encode a snapshot of the timeline + messages for sharing
     const snapshot = {
       t: template.id,
       ts: Date.now(),
@@ -377,6 +394,26 @@ export default function DemoPage() {
     const url = `${window.location.origin}/demo/${template.id}?snapshot=${encoded}`;
     navigator.clipboard.writeText(url);
     toast.success("Snapshot link copied to clipboard");
+  };
+
+  // Autopilot handlers
+  const handleAutopilotStart = () => {
+    setAutopilotActive(true);
+    setAutopilotStep(0);
+  };
+
+  const handleAutopilotAdvance = () => {
+    if (!autopilotScript || autopilotStep >= autopilotScript.steps.length) return;
+    const step = autopilotScript.steps[autopilotStep];
+    setAutopilotWaiting(true);
+    setAutopilotStep((prev) => prev + 1);
+    sendMessage(step.userMessage);
+  };
+
+  const handleAutopilotStop = () => {
+    setAutopilotActive(false);
+    setAutopilotStep(0);
+    setAutopilotWaiting(false);
   };
 
   return (
@@ -421,8 +458,21 @@ export default function DemoPage() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-6">
             <div className="mx-auto max-w-3xl space-y-4">
+              {/* Autopilot controls at top when no messages */}
+              {messages.length === 0 && autopilotScript && (
+                <AutopilotControls
+                  script={autopilotScript}
+                  currentStep={autopilotStep}
+                  isActive={autopilotActive}
+                  isWaiting={autopilotWaiting}
+                  onStart={handleAutopilotStart}
+                  onAdvance={handleAutopilotAdvance}
+                  onStop={handleAutopilotStop}
+                />
+              )}
+
               {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="flex flex-col items-center justify-center py-12 text-center">
                   <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: `${template.color}15` }}>
                     <Shield className="h-8 w-8" style={{ color: template.color }} />
                   </div>
@@ -437,6 +487,19 @@ export default function DemoPage() {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {/* Autopilot controls inline when messages exist */}
+              {messages.length > 0 && autopilotScript && autopilotActive && (
+                <AutopilotControls
+                  script={autopilotScript}
+                  currentStep={autopilotStep}
+                  isActive={autopilotActive}
+                  isWaiting={autopilotWaiting}
+                  onStart={handleAutopilotStart}
+                  onAdvance={handleAutopilotAdvance}
+                  onStop={handleAutopilotStop}
+                />
               )}
 
               <AnimatePresence>
@@ -493,6 +556,13 @@ export default function DemoPage() {
               <div ref={messagesEndRef} />
             </div>
           </div>
+
+          {/* Architecture Shelf */}
+          <ArchitectureShelf
+            templateName={template.name}
+            activeFeatures={template.auth0Features.map((f) => f.name)}
+            lastToolCall={lastToolCall}
+          />
 
           {/* Input */}
           <div className="border-t border-border px-4 py-4">
