@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import { getTemplateById, generateEnvId } from "@/lib/demo-templates";
 import { Button } from "@/components/ui/button";
@@ -23,8 +23,27 @@ interface ChatMessage {
 export default function DemoPage() {
   const { templateId } = useParams<{ templateId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth0();
-  const template = getTemplateById(templateId || "");
+  const baseTemplate = getTemplateById(templateId || "");
+
+  // Apply builder config if coming from builder mode
+  const builderConfig = (location.state as any)?.builderConfig;
+  const template = baseTemplate ? {
+    ...baseTemplate,
+    tools: builderConfig?.enabledTools
+      ? baseTemplate.tools.filter((t) => builderConfig.enabledTools.includes(t.id))
+      : baseTemplate.tools,
+    auth0Features: builderConfig?.enabledFeatures
+      ? baseTemplate.auth0Features.filter((f) => builderConfig.enabledFeatures.includes(f.id))
+      : baseTemplate.auth0Features,
+    systemPromptParts: [
+      ...baseTemplate.systemPromptParts,
+      ...(builderConfig?.customPrompt ? [builderConfig.customPrompt] : []),
+    ],
+    knowledgePack: baseTemplate.knowledgePack + (builderConfig?.customKnowledge ? "\n\n" + builderConfig.customKnowledge : ""),
+  } : null;
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -32,6 +51,7 @@ export default function DemoPage() {
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [pendingToolContext, setPendingToolContext] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
 
   const envId = user?.sub && templateId ? generateEnvId(user.sub, templateId) : "unknown";
 
