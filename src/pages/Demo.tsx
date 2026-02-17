@@ -487,13 +487,28 @@ export default function DemoPage() {
 
       {/* Body = Chat + Timeline */}
       <div className="flex flex-1 overflow-hidden">
+        {/* Autopilot Sidebar — fixed left panel when active */}
+        {autopilotScript && autopilotActive && (
+          <div className="w-72 shrink-0 border-r border-border bg-card/50 flex flex-col overflow-y-auto">
+            <AutopilotControls
+              script={autopilotScript}
+              currentStep={autopilotStep}
+              isActive={autopilotActive}
+              isWaiting={autopilotWaiting}
+              onStart={handleAutopilotStart}
+              onAdvance={handleAutopilotAdvance}
+              onStop={handleAutopilotStop}
+            />
+          </div>
+        )}
+
         {/* Chat Area */}
         <div className="flex flex-1 flex-col">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-6">
             <div className="mx-auto max-w-3xl space-y-4">
-              {/* Autopilot controls at top when no messages */}
-              {messages.length === 0 && autopilotScript && (
+              {/* Autopilot start prompt when not yet active */}
+              {messages.length === 0 && autopilotScript && !autopilotActive && (
                 <AutopilotControls
                   script={autopilotScript}
                   currentStep={autopilotStep}
@@ -523,18 +538,7 @@ export default function DemoPage() {
                 </div>
               )}
 
-              {/* Autopilot controls inline when messages exist */}
-              {messages.length > 0 && autopilotScript && autopilotActive && (
-                <AutopilotControls
-                  script={autopilotScript}
-                  currentStep={autopilotStep}
-                  isActive={autopilotActive}
-                  isWaiting={autopilotWaiting}
-                  onStart={handleAutopilotStart}
-                  onAdvance={handleAutopilotAdvance}
-                  onStop={handleAutopilotStop}
-                />
-              )}
+
 
               <AnimatePresence>
                 {messages.map((msg) => (
