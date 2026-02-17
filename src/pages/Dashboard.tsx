@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Plane, Briefcase, ShoppingBag, Code, Wrench, Shield, Plus, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
-import auth0Logo from "@/assets/auth0-logo.svg";
+import auth0Logo from "@/assets/auth0-logo-full-white.png";
 
 const iconMap: Record<string, React.ElementType> = {
   Plane, Briefcase, ShoppingBag, Code, Wrench,
@@ -39,7 +39,7 @@ export default function Dashboard() {
       <header className="border-b border-border/50">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
-            <img src={auth0Logo} alt="Auth0" className="h-6" style={{ filter: "invert(1)" }} />
+            <img src={auth0Logo} alt="Auth0 by Okta" className="h-6" />
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">{user?.email}</span>

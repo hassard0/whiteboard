@@ -2,7 +2,7 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { Button } from "@/components/ui/button";
 import { Shield, Bot, Zap, Lock } from "lucide-react";
 import { motion } from "framer-motion";
-import auth0Logo from "@/assets/auth0-logo.svg";
+import auth0Logo from "@/assets/auth0-logo-full-white.png";
 
 export function LoginPage() {
   const { loginWithRedirect } = useAuth0();
@@ -12,7 +12,7 @@ export function LoginPage() {
       {/* Top bar */}
       <header className="relative z-20 flex items-center justify-between px-8 py-5">
         <div className="flex items-center gap-2.5">
-          <img src={auth0Logo} alt="Auth0" className="h-7 text-foreground" style={{ filter: "invert(1)" }} />
+          <img src={auth0Logo} alt="Auth0 by Okta" className="h-7" />
         </div>
         <div className="flex items-center gap-3">
           <Button
