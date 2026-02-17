@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Shield, Key, UserCheck, ArrowRightLeft, MessageSquare, ChevronRight, ChevronLeft } from "lucide-react";
+import { Shield, Key, UserCheck, ArrowRightLeft, MessageSquare, ChevronRight, ChevronLeft, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 
@@ -30,15 +30,24 @@ const eventColors = {
   auth: "text-primary",
   tool_call: "text-blue-400",
   approval: "text-yellow-400",
-  token_exchange: "text-auth0-teal",
+  token_exchange: "text-green-400",
   message: "text-muted-foreground",
+};
+
+const eventLabels = {
+  auth: "Authentication",
+  tool_call: "Tool Call",
+  approval: "Approval Gate",
+  token_exchange: "Token Exchange",
+  message: "Message",
 };
 
 export function EventTimeline({ events }: EventTimelineProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
 
   return (
-    <div className={`relative flex flex-col border-l border-border bg-card/50 transition-all duration-300 ${collapsed ? "w-12" : "w-72"}`}>
+    <div className={`relative flex flex-col border-l border-border bg-card/50 transition-all duration-300 ${collapsed ? "w-12" : "w-80"}`}>
       {/* Toggle */}
       <Button
         variant="ghost"
@@ -58,18 +67,65 @@ export function EventTimeline({ events }: EventTimelineProps) {
             <span className="text-[10px] text-muted-foreground">{events.length} events</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+          {/* Selected Event Detail Panel */}
+          <AnimatePresence>
+            {selectedEvent && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="border-b border-border bg-secondary/30 p-3 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className={`text-[10px] ${eventColors[selectedEvent.type]}`}>
+                    {eventLabels[selectedEvent.type]}
+                  </Badge>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setSelectedEvent(null)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+                <p className="text-xs font-medium text-foreground">{selectedEvent.title}</p>
+                {selectedEvent.detail && (
+                  <p className="text-[11px] text-muted-foreground">{selectedEvent.detail}</p>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">
+                    {selectedEvent.timestamp.toLocaleTimeString()}
+                  </span>
+                  {selectedEvent.auth0Feature && (
+                    <Badge variant="outline" className="text-[9px] h-4 px-1 border-primary/30 text-primary">
+                      {selectedEvent.auth0Feature}
+                    </Badge>
+                  )}
+                  {selectedEvent.status && (
+                    <Badge
+                      variant={selectedEvent.status === "denied" ? "destructive" : "secondary"}
+                      className="text-[9px] h-4 px-1"
+                    >
+                      {selectedEvent.status}
+                    </Badge>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
             <AnimatePresence>
               {events.map((event, i) => {
                 const Icon = eventIcons[event.type];
                 const color = eventColors[event.type];
+                const isSelected = selectedEvent?.id === event.id;
                 return (
                   <motion.div
                     key={event.id}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                    className="group flex gap-2.5 rounded-lg p-2 hover:bg-secondary/50 transition-colors"
+                    transition={{ delay: i * 0.02 }}
+                    className={`group flex gap-2.5 rounded-lg p-2 cursor-pointer transition-colors ${
+                      isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-secondary/50"
+                    }`}
+                    onClick={() => setSelectedEvent(isSelected ? null : event)}
                   >
                     <div className={`mt-0.5 shrink-0 ${color}`}>
                       <Icon className="h-3.5 w-3.5" />

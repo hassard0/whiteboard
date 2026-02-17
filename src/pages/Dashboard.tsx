@@ -80,6 +80,23 @@ export default function Dashboard() {
                         </Badge>
                       ))}
                     </div>
+                    <div className="mt-4 flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/builder/${template.id}`); }}
+                      >
+                        <Wrench className="mr-1 h-3 w-3" /> Configure
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="gradient-auth0 text-primary-foreground text-xs"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/demo/${template.id}`); }}
+                      >
+                        Launch Demo
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </motion.div>

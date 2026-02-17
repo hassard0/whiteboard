@@ -2,6 +2,8 @@ import { Badge } from "@/components/ui/badge";
 import { Shield, Check, X, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { TokenVaultFlow } from "./TokenVaultFlow";
+import { AuthExplainer } from "./AuthExplainer";
 
 export interface ToolCallDisplay {
   id: string;
@@ -13,6 +15,7 @@ export interface ToolCallDisplay {
   auth0Feature?: string;
   result?: string;
   timestamp: Date;
+  showTokenVault?: boolean;
 }
 
 interface ToolCallCardProps {
@@ -28,9 +31,18 @@ const statusConfig = {
 };
 
 export function ToolCallCard({ toolCall }: ToolCallCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const config = statusConfig[toolCall.status];
   const StatusIcon = config.icon;
+
+  // Determine which Auth0 feature to highlight
+  const auth0Feature = toolCall.requiresApproval ? "Async Authorization" : "Fine-Grained Authorization";
+  const hasTokenVault = toolCall.scopes.some(s =>
+    s.includes("write") || s.includes("send") || s.includes("charge") || s.includes("execute")
+  );
+  const auth0Explanation = toolCall.requiresApproval
+    ? "This action required explicit human approval before execution. The agent cannot perform sensitive actions without your consent."
+    : `This action was automatically authorized because your token includes the required scopes: ${toolCall.scopes.join(", ")}.`;
 
   return (
     <motion.div
@@ -61,23 +73,30 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="mt-3 space-y-2 overflow-hidden"
+            className="mt-3 space-y-3 overflow-hidden"
           >
             <p className="text-xs text-muted-foreground">{toolCall.toolDescription}</p>
-            <div className="flex flex-wrap gap-1">
-              {toolCall.scopes.map((s) => (
-                <Badge key={s} variant="secondary" className="text-[10px] font-mono">
-                  {s}
-                </Badge>
-              ))}
-            </div>
-            {toolCall.auth0Feature && (
-              <div className="text-xs text-primary">
-                Auth0 Feature: {toolCall.auth0Feature}
-              </div>
+
+            {/* Auth0 Explainer */}
+            <AuthExplainer
+              feature={auth0Feature}
+              explanation={auth0Explanation}
+              scopes={toolCall.scopes}
+              decision={toolCall.status === "denied" ? "denied" : toolCall.status === "pending" ? "pending" : "allowed"}
+            />
+
+            {/* Token Vault Flow for completed tool calls that involve write/sensitive ops */}
+            {hasTokenVault && (toolCall.status === "completed" || toolCall.status === "approved") && (
+              <TokenVaultFlow
+                toolName={toolCall.toolName}
+                provider="External API"
+                isVisible
+              />
             )}
+
+            {/* Result */}
             {toolCall.result && (
-              <pre className="rounded-md bg-secondary/50 p-2 text-[11px] text-muted-foreground whitespace-pre-wrap">
+              <pre className="rounded-md border border-border bg-secondary/50 p-2.5 text-[11px] text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
                 {toolCall.result}
               </pre>
             )}

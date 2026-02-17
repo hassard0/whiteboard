@@ -7,6 +7,7 @@ import { Auth0ProviderWrapper } from "@/components/Auth0ProviderWrapper";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import DemoPage from "./pages/Demo";
+import BuilderPage from "./pages/Builder";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DemoPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/builder/:templateId"
+              element={
+                <ProtectedRoute>
+                  <BuilderPage />
                 </ProtectedRoute>
               }
             />
