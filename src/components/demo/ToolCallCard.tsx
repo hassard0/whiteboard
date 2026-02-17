@@ -31,7 +31,7 @@ const statusConfig = {
 };
 
 export function ToolCallCard({ toolCall }: ToolCallCardProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const config = statusConfig[toolCall.status];
   const StatusIcon = config.icon;
 
