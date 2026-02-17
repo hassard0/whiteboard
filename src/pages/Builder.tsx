@@ -11,7 +11,7 @@ import { ArrowLeft, Eye, Shield, Wrench, Save, RotateCcw, Loader2 } from "lucide
 import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import auth0Shield from "@/assets/auth0-shield.png";
+import auth0Shield from "@/assets/auth0-shield.svg";
 
 export default function BuilderPage() {
   const { templateId } = useParams<{ templateId: string }>();

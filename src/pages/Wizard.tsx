@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import auth0Shield from "@/assets/auth0-shield.png";
+import auth0Shield from "@/assets/auth0-shield.svg";
 
 const industryIcons: Record<string, React.ElementType> = {
   Plane, Heart, DollarSign, ShoppingCart, Users, Scale, Terminal, Sparkles,
