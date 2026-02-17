@@ -8,9 +8,11 @@ interface ArchitectureShelfProps {
   templateName: string;
   activeFeatures: string[];
   lastToolCall?: string;
+  /** Which architecture node to highlight as the current stage */
+  activeStage?: "user" | "auth0" | "agent" | "tools" | "vault" | "data";
 }
 
-export function ArchitectureShelf({ templateName, activeFeatures, lastToolCall }: ArchitectureShelfProps) {
+export function ArchitectureShelf({ templateName, activeFeatures, lastToolCall, activeStage }: ArchitectureShelfProps) {
   const [expanded, setExpanded] = useState(false);
 
   const nodes = [
@@ -115,17 +117,19 @@ export function ArchitectureShelf({ templateName, activeFeatures, lastToolCall }
                       <div key={node.id} className="flex items-center gap-2 shrink-0">
                         <motion.div
                           className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 min-w-[100px] transition-all ${
-                            node.highlight
+                            activeStage === node.id
+                              ? "border-primary ring-2 ring-primary/30 shadow-md shadow-primary/20"
+                              : node.highlight
                               ? "border-primary/40 shadow-sm shadow-primary/10"
                               : node.active
                               ? "border-auth0-violet/40"
                               : "border-border"
                           } ${node.bg}`}
-                          animate={node.active ? { scale: [1, 1.02, 1] } : {}}
-                          transition={{ repeat: node.active ? Infinity : 0, duration: 2 }}
+                          animate={activeStage === node.id ? { scale: [1, 1.04, 1] } : node.active ? { scale: [1, 1.02, 1] } : {}}
+                          transition={{ repeat: (activeStage === node.id || node.active) ? Infinity : 0, duration: 2 }}
                         >
-                          <Icon className={`h-5 w-5 ${node.color}`} />
-                          <span className="text-[11px] font-semibold text-foreground">{node.label}</span>
+                          <Icon className={`h-5 w-5 ${activeStage === node.id ? "text-primary" : node.color}`} />
+                          <span className={`text-[11px] font-semibold ${activeStage === node.id ? "text-primary" : "text-foreground"}`}>{node.label}</span>
                           <span className="text-[9px] text-muted-foreground text-center leading-tight">{node.sublabel}</span>
                         </motion.div>
                         {i < nodes.length - 1 && (

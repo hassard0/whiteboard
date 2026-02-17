@@ -595,6 +595,13 @@ export default function DemoPage() {
             templateName={template.name}
             activeFeatures={template.auth0Features.map((f) => f.name)}
             lastToolCall={lastToolCall}
+            activeStage={
+              approvalRequest ? "vault"
+                : isLoading && lastToolCall ? "tools"
+                : isLoading ? "agent"
+                : messages.length === 0 ? "user"
+                : "auth0"
+            }
           />
 
           {/* Input */}
