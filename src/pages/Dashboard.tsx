@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Plane, Briefcase, ShoppingBag, Code, Wrench, Shield, Plus, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
-import auth0Shield from "@/assets/auth0-shield.png";
+import auth0Logo from "@/assets/auth0-logo.svg";
 
 const iconMap: Record<string, React.ElementType> = {
   Plane, Briefcase, ShoppingBag, Code, Wrench,
@@ -20,7 +20,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   useAuth0ProfileSync();
 
-  // Load custom demos from DB
   const [customDemos, setCustomDemos] = useState<any[]>([]);
   useEffect(() => {
     if (!user?.sub) return;
@@ -36,18 +35,18 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border">
+      {/* Header — matches auth0.com nav style */}
+      <header className="border-b border-border/50">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <img src={auth0Shield} alt="Auth0" className="h-8 w-8 invert" />
-            <span className="text-lg font-bold tracking-tight text-foreground">Auth0 AI Demos</span>
+          <div className="flex items-center gap-2.5">
+            <img src={auth0Logo} alt="Auth0" className="h-6" style={{ filter: "invert(1)" }} />
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">{user?.email}</span>
             <Button
               variant="ghost"
               size="sm"
+              className="rounded-full text-muted-foreground hover:text-foreground"
               onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
             >
               <LogOut className="mr-2 h-4 w-4" />
@@ -58,21 +57,29 @@ export default function Dashboard() {
       </header>
 
       {/* Hero gradient */}
-      <div className="pointer-events-none absolute left-0 right-0 top-16 h-64 gradient-hero opacity-40" />
+      <div className="pointer-events-none absolute left-0 right-0 top-16 h-72 z-0" style={{
+        background: "radial-gradient(ellipse at 50% 0%, hsl(262 80% 50% / 0.2) 0%, hsl(240 60% 45% / 0.1) 50%, transparent 80%)",
+      }} />
 
       {/* Main */}
-      <main className="relative mx-auto max-w-7xl px-6 py-12">
+      <main className="relative z-10 mx-auto max-w-7xl px-6 py-12">
         <div className="mb-10 flex items-end justify-between">
           <div>
-            <Badge variant="outline" className="mb-3 text-xs border-primary/40 text-primary">
-              NEW — Auth0 for AI Agents
-            </Badge>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Demo Launcher</h1>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="rounded-md bg-foreground px-2 py-0.5 text-[10px] font-bold tracking-wide text-background">
+                NEW
+              </span>
+              <span className="text-sm text-muted-foreground">Auth0 for AI Agents</span>
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Demo Launcher</h1>
             <p className="mt-2 text-muted-foreground">
               Choose a demo to experience Auth0-secured AI agents in action.
             </p>
           </div>
-          <Button onClick={() => navigate("/wizard")} className="gradient-auth0 text-primary-foreground">
+          <Button
+            onClick={() => navigate("/wizard")}
+            className="rounded-full bg-foreground text-background hover:bg-foreground/90 px-6"
+          >
             <Plus className="mr-1.5 h-4 w-4" /> Create Demo
           </Button>
         </div>
@@ -95,7 +102,7 @@ export default function Dashboard() {
                     transition={{ duration: 0.4, delay: i * 0.08 }}
                   >
                     <Card
-                      className="group cursor-pointer transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
+                      className="group cursor-pointer border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
                       onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
                     >
                       <CardHeader>
@@ -112,7 +119,7 @@ export default function Dashboard() {
                           ))}
                         </div>
                         <div className="mt-4">
-                          <Button size="sm" className="gradient-auth0 text-primary-foreground text-xs">
+                          <Button size="sm" className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4">
                             Launch Demo
                           </Button>
                         </div>
@@ -138,7 +145,7 @@ export default function Dashboard() {
                 transition={{ duration: 0.4, delay: i * 0.08 }}
               >
                 <Card
-                  className="group cursor-pointer transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
+                  className="group cursor-pointer border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
                   onClick={() => navigate(`/demo/${template.id}`)}
                 >
                   <CardHeader>
@@ -160,14 +167,14 @@ export default function Dashboard() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-xs"
+                        className="rounded-full text-xs border-border/60"
                         onClick={(e) => { e.stopPropagation(); navigate(`/builder/${template.id}`); }}
                       >
                         <Wrench className="mr-1 h-3 w-3" /> Configure
                       </Button>
                       <Button
                         size="sm"
-                        className="gradient-auth0 text-primary-foreground text-xs"
+                        className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
                         onClick={(e) => { e.stopPropagation(); navigate(`/demo/${template.id}`); }}
                       >
                         Launch Demo
