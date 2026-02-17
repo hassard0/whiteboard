@@ -57,6 +57,15 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        auth0: {
+          navy: "hsl(var(--auth0-navy))",
+          orange: "hsl(var(--auth0-orange))",
+          "orange-glow": "hsl(var(--auth0-orange-glow))",
+          teal: "hsl(var(--auth0-teal))",
+          purple: "hsl(var(--auth0-purple))",
+          surface: "hsl(var(--auth0-surface))",
+          "surface-hover": "hsl(var(--auth0-surface-hover))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
