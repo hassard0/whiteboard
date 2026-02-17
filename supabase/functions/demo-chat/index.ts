@@ -5,7 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Mock tool execution — returns realistic fake data
 function executeMockTool(toolId: string, args: Record<string, unknown>): Record<string, unknown> {
   const mocks: Record<string, () => Record<string, unknown>> = {
     search_flights: () => ({
@@ -84,18 +83,15 @@ serve(async (req) => {
     }));
 
     // Assemble system prompt
-    const systemPromptSections = [
+    const systemPrompt = [
       "You are an AI agent running inside an Auth0-secured demo environment.",
       "",
-      "## Your Identity",
-      `- Template: ${template_id}`,
-      `- Environment ID: ${env_id}`,
+      `Template: ${template_id} | Environment: ${env_id}`,
       "",
-      "## Auth0 Rules",
-      "- Act only within the scopes provided by the user's Auth0 token",
-      "- For tools marked as REQUIRES APPROVAL, you MUST call the tool — the system will handle showing the approval modal",
-      "- After tool results, narrate what happened and what Auth0 did",
-      "- Never pretend to have capabilities you don't have",
+      "## Rules",
+      "- Use tools when the user asks for actions. Don't just describe — actually call the tool.",
+      "- For tools requiring approval, call them and the system handles the approval modal.",
+      "- After tool results, narrate what happened and explain which Auth0 feature enabled it.",
       "",
       "## Your Role",
       ...(system_prompt_parts || []),
@@ -103,48 +99,36 @@ serve(async (req) => {
       "## Auth0 Knowledge",
       knowledge_pack || "",
       "",
-      "## Available Tools",
-      ...(tools || []).map((t: any) => `- **${t.name}** (${t.id}): ${t.description} [scopes: ${t.scopes.join(", ")}]${t.requiresApproval ? " [REQUIRES APPROVAL]" : ""}`),
-      "",
-      "## Response Guidelines",
-      "- Use tools when the user requests an action — don't just describe what you'd do",
-      "- After each tool result, explain what Auth0 did (token delegation, scope check, approval gate)",
-      "- Use markdown formatting for clarity",
-      "- Be conversational but professional",
-    ];
+      "## Response Format",
+      "- Use clean markdown: headers, bullet points, bold for emphasis",
+      "- Present data in tables when showing lists (flights, hotels, products)",
+      "- Keep responses concise and professional",
+      "- After tool use, add a brief Auth0 explainer callout like: > 🔐 **Auth0**: [feature] — [explanation]",
+    ].join("\n");
 
-    const systemPrompt = systemPromptSections.join("\n");
+    // Build message list
+    const allMessages: any[] = [{ role: "system", content: systemPrompt }];
 
-    // If there are pending tool calls with approval results, inject them
-    const allMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages,
-    ];
+    // Add conversation messages
+    for (const msg of messages) {
+      allMessages.push({ role: msg.role, content: msg.content });
+    }
 
-    // Add pending approval results as tool results if provided
+    // Inject approval results as a system message (avoids tool message format issues)
     if (pending_approvals && pending_approvals.length > 0) {
-      for (const approval of pending_approvals) {
-        if (approval.decision === "approved") {
-          const mockResult = executeMockTool(approval.tool_id, approval.args || {});
-          allMessages.push({
-            role: "tool" as any,
-            content: JSON.stringify({
-              tool_id: approval.tool_id,
-              status: "approved_and_executed",
-              result: mockResult,
-            }),
-          });
+      const approvalSummaries = pending_approvals.map((a: any) => {
+        if (a.decision === "approved") {
+          const result = executeMockTool(a.tool_id, a.args || {});
+          return `Tool "${a.tool_id}" was APPROVED and executed. Result:\n${JSON.stringify(result, null, 2)}`;
         } else {
-          allMessages.push({
-            role: "tool" as any,
-            content: JSON.stringify({
-              tool_id: approval.tool_id,
-              status: "denied_by_user",
-              message: "The user denied this action. Explain that the approval was denied and suggest alternatives.",
-            }),
-          });
+          return `Tool "${a.tool_id}" was DENIED by the user. Acknowledge the denial and suggest alternatives.`;
         }
-      }
+      });
+
+      allMessages.push({
+        role: "user",
+        content: `[SYSTEM: Tool execution results]\n${approvalSummaries.join("\n\n")}\n\nPlease summarize the results to the user in a clear, well-formatted way. Explain what Auth0 did at each step.`,
+      });
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -174,13 +158,12 @@ serve(async (req) => {
       }
       const t = await response.text();
       console.error("AI gateway error:", response.status, t);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
+      return new Response(JSON.stringify({ error: "AI gateway error: " + t }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // For streaming with tool calls, we need to collect the full response to detect tool calls
-    // Then either stream the text or return tool call instructions
+    // Consume stream to detect tool calls
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
     let fullContent = "";
@@ -206,27 +189,25 @@ serve(async (req) => {
           if (delta?.content) fullContent += delta.content;
           if (delta?.tool_calls) {
             for (const tc of delta.tool_calls) {
-              const idx = tc.index ?? 0;
-              if (!toolCalls[idx]) {
-                toolCalls[idx] = { id: tc.id || "", function: { name: "", arguments: "" } };
-              }
-              if (tc.id) toolCalls[idx].id = tc.id;
-              if (tc.function?.name) toolCalls[idx].function.name += tc.function.name;
-              if (tc.function?.arguments) toolCalls[idx].function.arguments += tc.function.arguments;
+              const i = tc.index ?? 0;
+              if (!toolCalls[i]) toolCalls[i] = { id: tc.id || "", function: { name: "", arguments: "" } };
+              if (tc.id) toolCalls[i].id = tc.id;
+              if (tc.function?.name) toolCalls[i].function.name += tc.function.name;
+              if (tc.function?.arguments) toolCalls[i].function.arguments += tc.function.arguments;
             }
           }
-        } catch { /* partial */ }
+        } catch { /* partial chunk */ }
       }
     }
 
-    // If tool calls detected, process them
+    // Process tool calls
     if (toolCalls.length > 0) {
       const toolsConfig = tools || [];
       const processedCalls = toolCalls.map((tc: any) => {
         const toolConfig = toolsConfig.find((t: any) => t.id === tc.function.name);
         let args = {};
         try { args = JSON.parse(tc.function.arguments || "{}"); } catch {}
-        
+
         if (toolConfig?.requiresApproval) {
           return {
             type: "approval_required",
@@ -235,10 +216,9 @@ serve(async (req) => {
             tool_description: toolConfig.description,
             scopes: toolConfig.scopes,
             args,
-            auth0_feature: toolConfig.requiresApproval ? "Async Authorization" : undefined,
+            auth0_feature: "Async Authorization",
           };
         } else {
-          // Execute immediately
           const result = executeMockTool(tc.function.name, args);
           return {
             type: "executed",
@@ -252,15 +232,50 @@ serve(async (req) => {
         }
       });
 
+      // For auto-executed tools, get a narration from the AI
+      const autoExecuted = processedCalls.filter((tc: any) => tc.type === "executed");
+      let narration = fullContent;
+
+      if (autoExecuted.length > 0 && !narration) {
+        const narrationMessages = [
+          ...allMessages,
+          {
+            role: "user",
+            content: `[SYSTEM: Tools executed automatically]\n${autoExecuted.map((tc: any) =>
+              `Tool "${tc.tool_name}" executed. Result: ${JSON.stringify(tc.result, null, 2)}`
+            ).join("\n\n")}\n\nPresent these results clearly to the user using markdown tables where appropriate. Add Auth0 explainer.`,
+          },
+        ];
+
+        try {
+          const narrationResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-3-flash-preview",
+              messages: narrationMessages,
+            }),
+          });
+          if (narrationResp.ok) {
+            const narrationData = await narrationResp.json();
+            narration = narrationData.choices?.[0]?.message?.content || "";
+          }
+        } catch (e) {
+          console.error("Narration error:", e);
+        }
+      }
+
       return new Response(JSON.stringify({
-        content: fullContent,
+        content: narration,
         tool_calls: processedCalls,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // No tool calls — return content as simple JSON (we already consumed the stream)
     return new Response(JSON.stringify({ content: fullContent, tool_calls: [] }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

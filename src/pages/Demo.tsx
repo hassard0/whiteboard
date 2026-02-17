@@ -406,7 +406,7 @@ export default function DemoPage() {
                         }`}
                       >
                         {msg.role === "assistant" ? (
-                          <div className="prose prose-sm prose-invert max-w-none">
+                          <div className="prose prose-sm prose-invert max-w-none [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-border [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:bg-secondary/50 [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-1.5 [&_blockquote]:border-l-2 [&_blockquote]:border-primary [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_strong]:text-foreground [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_h3]:font-semibold [&_p]:leading-relaxed [&_ul]:space-y-1 [&_li]:text-muted-foreground">
                             <ReactMarkdown>{msg.content}</ReactMarkdown>
                           </div>
                         ) : (
