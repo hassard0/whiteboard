@@ -61,22 +61,14 @@ export function LoginPage() {
             Experience how Auth0 secures AI agents with approval gates, delegated access, and identity-driven authorization.
           </p>
 
-          {/* CTA buttons — matching auth0.com style */}
+          {/* CTA button */}
           <div className="mt-10 flex items-center gap-4">
             <Button
               size="lg"
               onClick={() => loginWithRedirect()}
               className="h-12 rounded-full bg-foreground px-8 text-base font-medium text-background hover:bg-foreground/90 transition-colors"
             >
-              Start building for free
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => loginWithRedirect()}
-              className="h-12 rounded-full border-border/60 bg-transparent px-8 text-base font-medium text-foreground hover:bg-secondary transition-colors"
-            >
-              Talk to sales
+              Login to demo
             </Button>
           </div>
         </motion.div>
