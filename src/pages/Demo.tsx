@@ -4,20 +4,20 @@ import { getTemplateById, generateEnvId } from "@/lib/demo-templates";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, RotateCcw, Shield, Send } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
+import { ApprovalModal, type ApprovalRequest } from "@/components/demo/ApprovalModal";
+import { ToolCallCard, type ToolCallDisplay } from "@/components/demo/ToolCallCard";
+import { EventTimeline, type TimelineEvent } from "@/components/demo/EventTimeline";
+import { toast } from "sonner";
 
 interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: Date;
-  toolCall?: {
-    toolName: string;
-    scopes: string[];
-    status: "pending" | "approved" | "denied" | "completed";
-  };
+  toolCalls?: ToolCallDisplay[];
 }
 
 export default function DemoPage() {
@@ -28,6 +28,9 @@ export default function DemoPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
+  const [pendingToolContext, setPendingToolContext] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const envId = user?.sub && templateId ? generateEnvId(user.sub, templateId) : "unknown";
@@ -35,6 +38,34 @@ export default function DemoPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Add initial auth event
+  useEffect(() => {
+    if (user?.email) {
+      addTimelineEvent("auth", "User Authenticated", `${user.email} via Auth0`, "success");
+    }
+  }, [user?.email]);
+
+  const addTimelineEvent = useCallback((
+    type: TimelineEvent["type"],
+    title: string,
+    detail?: string,
+    status?: TimelineEvent["status"],
+    auth0Feature?: string,
+  ) => {
+    setTimelineEvents((prev) => [
+      {
+        id: crypto.randomUUID(),
+        type,
+        title,
+        detail,
+        status,
+        timestamp: new Date(),
+        auth0Feature,
+      },
+      ...prev,
+    ]);
+  }, []);
 
   if (!template) {
     return (
@@ -49,6 +80,122 @@ export default function DemoPage() {
     );
   }
 
+  const callAgent = async (
+    chatMessages: { role: string; content: string }[],
+    pendingApprovals?: any[],
+  ) => {
+    const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/demo-chat`;
+
+    const resp = await fetch(CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({
+        messages: chatMessages,
+        template_id: template.id,
+        env_id: envId,
+        system_prompt_parts: template.systemPromptParts,
+        knowledge_pack: template.knowledgePack,
+        tools: template.tools,
+        pending_approvals: pendingApprovals,
+      }),
+    });
+
+    if (!resp.ok) {
+      const errBody = await resp.text();
+      if (resp.status === 429) toast.error("Rate limit exceeded. Please wait a moment.");
+      else if (resp.status === 402) toast.error("AI usage limit reached.");
+      else throw new Error(errBody || "Agent error");
+      return null;
+    }
+
+    return resp.json();
+  };
+
+  const processAgentResponse = async (
+    data: any,
+    chatHistory: { role: string; content: string }[],
+  ) => {
+    const toolCalls: ToolCallDisplay[] = [];
+
+    // Process tool calls
+    for (const tc of data.tool_calls || []) {
+      if (tc.type === "executed") {
+        // Auto-executed (no approval needed)
+        toolCalls.push({
+          id: crypto.randomUUID(),
+          toolName: tc.tool_name,
+          toolDescription: tc.tool_description,
+          scopes: tc.scopes,
+          status: "completed",
+          requiresApproval: false,
+          result: JSON.stringify(tc.result, null, 2),
+          timestamp: new Date(),
+        });
+        addTimelineEvent("tool_call", `${tc.tool_name} executed`, `Scopes: ${tc.scopes.join(", ")}`, "success");
+      } else if (tc.type === "approval_required") {
+        // Needs approval — show modal
+        toolCalls.push({
+          id: crypto.randomUUID(),
+          toolName: tc.tool_name,
+          toolDescription: tc.tool_description,
+          scopes: tc.scopes,
+          status: "pending",
+          requiresApproval: true,
+          auth0Feature: "Async Authorization",
+          timestamp: new Date(),
+        });
+
+        addTimelineEvent("approval", `Approval requested: ${tc.tool_name}`, tc.tool_description, "pending", "Async Authorization");
+
+        // Show approval modal
+        const approvalReq: ApprovalRequest = {
+          id: crypto.randomUUID(),
+          toolName: tc.tool_name,
+          toolDescription: tc.tool_description,
+          scopes: tc.scopes,
+          dataSummary: tc.args?.reason ? { Reason: tc.args.reason } : {},
+          auth0Feature: "Async Authorization",
+          auth0Explanation: "This action requires explicit human approval. Auth0's Async Authorization pattern ensures AI agents cannot perform sensitive actions without user consent.",
+        };
+
+        // Store context for after approval
+        setPendingToolContext({
+          toolCall: tc,
+          chatHistory,
+          content: data.content,
+          otherToolCalls: toolCalls,
+        });
+        setApprovalRequest(approvalReq);
+        return { content: data.content, toolCalls, awaitingApproval: true };
+      }
+    }
+
+    // If we have executed tool results, send them back to the agent for narration
+    if (toolCalls.length > 0 && toolCalls.every((tc) => tc.status === "completed")) {
+      const executedResults = (data.tool_calls || [])
+        .filter((tc: any) => tc.type === "executed")
+        .map((tc: any) => ({
+          decision: "approved",
+          tool_id: tc.tool_id,
+          args: tc.args,
+        }));
+
+      const followUp = await callAgent(
+        [...chatHistory, { role: "assistant", content: data.content || "I'll use some tools to help." }],
+        executedResults,
+      );
+
+      if (followUp?.content) {
+        return { content: followUp.content, toolCalls, awaitingApproval: false };
+      }
+    }
+
+    return { content: data.content, toolCalls, awaitingApproval: false };
+  };
+
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -62,72 +209,45 @@ export default function DemoPage() {
     setInput("");
     setIsLoading(true);
 
-    // Stream AI response from edge function
-    let assistantSoFar = "";
-    const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/demo-chat`;
+    addTimelineEvent("message", "User message", input.trim().slice(0, 60));
 
     try {
-      const allMessages = [...messages, userMsg].map((m) => ({
+      const chatHistory = [...messages, userMsg].map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          messages: allMessages,
-          template_id: template.id,
-          env_id: envId,
-          system_prompt_parts: template.systemPromptParts,
-          knowledge_pack: template.knowledgePack,
-          tools: template.tools,
-        }),
-      });
+      const data = await callAgent(chatHistory);
+      if (!data) { setIsLoading(false); return; }
 
-      if (!resp.ok || !resp.body) {
-        const errBody = await resp.text();
-        throw new Error(errBody || "Failed to start stream");
-      }
+      const result = await processAgentResponse(data, chatHistory);
+      if (!result) { setIsLoading(false); return; }
 
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              assistantSoFar += content;
-              setMessages((prev) => {
-                const last = prev[prev.length - 1];
-                if (last?.role === "assistant") {
-                  return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
-                }
-                return [...prev, { id: crypto.randomUUID(), role: "assistant", content: assistantSoFar, timestamp: new Date() }];
-              });
-            }
-          } catch {
-            textBuffer = line + "\n" + textBuffer;
-            break;
-          }
+      if (!result.awaitingApproval) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: result.content || "",
+            timestamp: new Date(),
+            toolCalls: result.toolCalls,
+          },
+        ]);
+        addTimelineEvent("message", "Agent response", result.content?.slice(0, 60));
+      } else {
+        // Add partial message while awaiting approval
+        if (result.content) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: result.content,
+              timestamp: new Date(),
+              toolCalls: result.toolCalls,
+            },
+          ]);
         }
       }
     } catch (e) {
@@ -137,12 +257,80 @@ export default function DemoPage() {
         { id: crypto.randomUUID(), role: "assistant", content: "Sorry, I encountered an error. Please try again.", timestamp: new Date() },
       ]);
     } finally {
+      if (!approvalRequest) setIsLoading(false);
+    }
+  };
+
+  const handleApprovalDecision = async (requestId: string, decision: "approved" | "denied") => {
+    setApprovalRequest(null);
+    const ctx = pendingToolContext;
+    if (!ctx) { setIsLoading(false); return; }
+
+    addTimelineEvent(
+      "approval",
+      `${decision === "approved" ? "Approved" : "Denied"}: ${ctx.toolCall.tool_name}`,
+      undefined,
+      decision === "approved" ? "success" : "denied",
+      "Async Authorization",
+    );
+
+    if (decision === "approved") {
+      addTimelineEvent("token_exchange", "Token delegated for tool execution", `${ctx.toolCall.tool_name}`, "success", "Token Vault");
+    }
+
+    try {
+      const followUp = await callAgent(ctx.chatHistory, [
+        { decision, tool_id: ctx.toolCall.tool_id, args: ctx.toolCall.args },
+      ]);
+
+      if (followUp) {
+        const toolCalls: ToolCallDisplay[] = (ctx.otherToolCalls || []).map((tc: ToolCallDisplay) =>
+          tc.toolName === ctx.toolCall.tool_name
+            ? { ...tc, status: decision === "approved" ? "completed" as const : "denied" as const }
+            : tc
+        );
+
+        // Process any new tool calls from follow-up
+        for (const tc of followUp.tool_calls || []) {
+          if (tc.type === "executed") {
+            toolCalls.push({
+              id: crypto.randomUUID(),
+              toolName: tc.tool_name,
+              toolDescription: tc.tool_description,
+              scopes: tc.scopes,
+              status: "completed",
+              requiresApproval: false,
+              result: JSON.stringify(tc.result, null, 2),
+              timestamp: new Date(),
+            });
+          }
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: followUp.content || (decision === "approved" ? "Action completed." : "Action was denied."),
+            timestamp: new Date(),
+            toolCalls,
+          },
+        ]);
+        addTimelineEvent("message", "Agent response", followUp.content?.slice(0, 60));
+      }
+    } catch (e) {
+      console.error("Post-approval error:", e);
+      toast.error("Error processing approval result");
+    } finally {
+      setPendingToolContext(null);
       setIsLoading(false);
     }
   };
 
   const handleReset = () => {
     setMessages([]);
+    setTimelineEvents([]);
+    addTimelineEvent("auth", "Environment reset", `Template: ${template.name}`, "success");
   };
 
   return (
@@ -175,97 +363,110 @@ export default function DemoPage() {
         </div>
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="mx-auto max-w-3xl space-y-4">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: `${template.color}15` }}>
-                <Shield className="h-8 w-8" style={{ color: template.color }} />
-              </div>
-              <h2 className="text-xl font-semibold">{template.name}</h2>
-              <p className="mt-2 max-w-md text-sm text-muted-foreground">{template.knowledgePack}</p>
-              <div className="mt-6 flex flex-wrap justify-center gap-2">
-                {template.tools.map((tool) => (
-                  <Badge key={tool.id} variant="secondary" className="text-xs">
-                    {tool.name}
-                    {tool.requiresApproval && (
-                      <Shield className="ml-1 h-3 w-3 text-primary" />
-                    )}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* Body = Chat + Timeline */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Chat Area */}
+        <div className="flex flex-1 flex-col">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-6">
+            <div className="mx-auto max-w-3xl space-y-4">
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: `${template.color}15` }}>
+                    <Shield className="h-8 w-8" style={{ color: template.color }} />
+                  </div>
+                  <h2 className="text-xl font-semibold">{template.name}</h2>
+                  <p className="mt-2 max-w-md text-sm text-muted-foreground">{template.knowledgePack}</p>
+                  <div className="mt-6 flex flex-wrap justify-center gap-2">
+                    {template.tools.map((tool) => (
+                      <Badge key={tool.id} variant="secondary" className="text-xs">
+                        {tool.name}
+                        {tool.requiresApproval && <Shield className="ml-1 h-3 w-3 text-primary" />}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          <AnimatePresence>
-            {messages.map((msg) => (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                    msg.role === "user"
-                      ? "gradient-auth0 text-primary-foreground"
-                      : "glass-panel"
-                  }`}
-                >
-                  {msg.role === "assistant" ? (
-                    <div className="prose prose-sm prose-invert max-w-none">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+              <AnimatePresence>
+                {messages.map((msg) => (
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div className={`max-w-[80%] space-y-2`}>
+                      <div
+                        className={`rounded-2xl px-4 py-3 text-sm ${
+                          msg.role === "user"
+                            ? "gradient-auth0 text-primary-foreground"
+                            : "glass-panel"
+                        }`}
+                      >
+                        {msg.role === "assistant" ? (
+                          <div className="prose prose-sm prose-invert max-w-none">
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          msg.content
+                        )}
+                      </div>
+
+                      {/* Tool Call Cards */}
+                      {msg.toolCalls && msg.toolCalls.length > 0 && (
+                        <div className="space-y-2">
+                          {msg.toolCalls.map((tc) => (
+                            <ToolCallCard key={tc.id} toolCall={tc} />
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    msg.content
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
 
-          {isLoading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex justify-start"
-            >
-              <div className="glass-panel flex items-center gap-2 rounded-2xl px-4 py-3 text-sm text-muted-foreground">
-                <div className="flex gap-1">
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
-                </div>
-                Thinking...
-              </div>
-            </motion.div>
-          )}
+              {isLoading && !approvalRequest && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+                  <div className="glass-panel flex items-center gap-2 rounded-2xl px-4 py-3 text-sm text-muted-foreground">
+                    <div className="flex gap-1">
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
+                    </div>
+                    Thinking...
+                  </div>
+                </motion.div>
+              )}
 
-          <div ref={messagesEndRef} />
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          {/* Input */}
+          <div className="border-t border-border px-4 py-4">
+            <div className="mx-auto flex max-w-3xl gap-2">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                placeholder={`Message ${template.name}...`}
+                className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              <Button onClick={handleSend} disabled={!input.trim() || isLoading} className="gradient-auth0 rounded-xl px-4">
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
+
+        {/* Event Timeline Sidebar */}
+        <EventTimeline events={timelineEvents} />
       </div>
 
-      {/* Input */}
-      <div className="border-t border-border px-4 py-4">
-        <div className="mx-auto flex max-w-3xl gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder={`Message ${template.name}...`}
-            className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-          <Button
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading}
-            className="gradient-auth0 rounded-xl px-4"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      {/* Approval Modal */}
+      <ApprovalModal request={approvalRequest} onDecision={handleApprovalDecision} />
     </div>
   );
 }
