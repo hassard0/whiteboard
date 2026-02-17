@@ -15,7 +15,7 @@ import { EventTimeline, type TimelineEvent } from "@/components/demo/EventTimeli
 import { AutopilotControls } from "@/components/demo/AutopilotControls";
 import { ArchitectureShelf } from "@/components/demo/ArchitectureShelf";
 import { toast } from "sonner";
-import auth0Shield from "@/assets/auth0-shield.png";
+import auth0Shield from "@/assets/auth0-shield.svg";
 
 interface ChatMessage {
   id: string;
