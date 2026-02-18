@@ -10,12 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Plane, Briefcase, ShoppingBag, Code, Wrench, Plus, Sparkles, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { AIMagicModal } from "@/components/demo/AIMagicModal";
+import { EditDemoModal } from "@/components/demo/EditDemoModal";
 import { toast } from "sonner";
 
 const iconMap: Record<string, React.ElementType> = {
@@ -31,9 +29,6 @@ export default function Dashboard() {
   const [magicOpen, setMagicOpen] = useState(false);
   const [editDemo, setEditDemo] = useState<any | null>(null);
   const [deleteDemo, setDeleteDemo] = useState<any | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editDesc, setEditDesc] = useState("");
-  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const loadCustomDemos = useCallback(async () => {
@@ -69,31 +64,15 @@ export default function Dashboard() {
     }
   };
 
-  const openEdit = (demo: any) => {
-    const cfg = demo.config_overrides as any;
-    setEditName(cfg.name || "");
-    setEditDesc(cfg.description || "");
-    setEditDemo(demo);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editDemo) return;
-    setSaving(true);
-    try {
-      const cfg = { ...(editDemo.config_overrides as any), name: editName, description: editDesc };
-      const { error } = await supabase
-        .from("demo_environments")
-        .update({ config_overrides: cfg })
-        .eq("id", editDemo.id);
-      if (error) throw error;
-      toast.success("Demo updated!");
-      setEditDemo(null);
-      await loadCustomDemos();
-    } catch (e: any) {
-      toast.error("Failed to update: " + e.message);
-    } finally {
-      setSaving(false);
-    }
+  const handleSaveEdit = async (id: string, newConfig: any) => {
+    const { error } = await supabase
+      .from("demo_environments")
+      .update({ config_overrides: newConfig })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+    toast.success("Demo updated!");
+    setEditDemo(null);
+    await loadCustomDemos();
   };
 
   const handleDelete = async () => {
@@ -128,32 +107,12 @@ export default function Dashboard() {
         onGenerated={handleAIGenerated}
       />
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editDemo} onOpenChange={(o) => !o && setEditDemo(null)}>
-        <DialogContent className="sm:max-w-md border-border/60 bg-card/95 backdrop-blur-xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pencil className="h-4 w-4 text-primary" /> Edit Demo
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Demo Name</Label>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="bg-secondary/50" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} className="bg-secondary/50 resize-none min-h-[80px]" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditDemo(null)}>Cancel</Button>
-            <Button onClick={handleSaveEdit} disabled={saving || !editName.trim()} className="rounded-full bg-foreground text-background hover:bg-foreground/90">
-              {saving ? "Saving…" : "Save Changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditDemoModal
+        open={!!editDemo}
+        demo={editDemo}
+        onClose={() => setEditDemo(null)}
+        onSave={handleSaveEdit}
+      />
 
       {/* Delete Confirm Dialog */}
       <Dialog open={!!deleteDemo} onOpenChange={(o) => !o && setDeleteDemo(null)}>
@@ -231,9 +190,7 @@ export default function Dashboard() {
                     transition={{ duration: 0.4, delay: i * 0.08 }}
                     className="flex"
                   >
-                    <Card
-                      className="group flex flex-col w-full border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
-                    >
+                    <Card className="group flex flex-col w-full border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10">
                       <CardHeader>
                         <div className="mb-3 flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -253,10 +210,10 @@ export default function Dashboard() {
                               <span className="text-xs text-muted-foreground font-medium">{cfg.customerName}</span>
                             )}
                           </div>
-                          {/* Edit / Delete actions */}
+                          {/* Edit / Delete */}
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
-                              onClick={(e) => { e.stopPropagation(); openEdit(demo); }}
+                              onClick={(e) => { e.stopPropagation(); setEditDemo(demo); }}
                               className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
                               title="Edit demo"
                             >
@@ -271,7 +228,12 @@ export default function Dashboard() {
                             </button>
                           </div>
                         </div>
-                        <CardTitle className="text-lg cursor-pointer" onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}>{cfg.name}</CardTitle>
+                        <CardTitle
+                          className="text-lg cursor-pointer"
+                          onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
+                        >
+                          {cfg.name}
+                        </CardTitle>
                         <CardDescription>{cfg.description}</CardDescription>
                       </CardHeader>
                       <CardContent className="flex flex-col flex-1">
@@ -325,9 +287,7 @@ export default function Dashboard() {
                   <CardContent className="flex flex-col flex-1">
                     <div className="flex flex-wrap gap-2">
                       {template.auth0Features.map((f) => (
-                        <Badge key={f.id} variant="secondary" className="text-xs">
-                          {f.name}
-                        </Badge>
+                        <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
                       ))}
                     </div>
                     <div className="mt-auto pt-4 flex gap-2">
