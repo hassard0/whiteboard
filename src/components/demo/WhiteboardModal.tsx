@@ -2,13 +2,14 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import mermaid from "mermaid";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface DiagramOption {
   id: string;
   name: string;
-  svg: string; // rendered SVG string
+  svg: string;
 }
 
 interface WhiteboardModalProps {
@@ -18,7 +19,7 @@ interface WhiteboardModalProps {
 
 type Tool = "draw" | "highlight" | "erase";
 
-// ─── Palette colours (themed) ────────────────────────────────────────────────
+// ─── Palette colours ─────────────────────────────────────────────────────────
 
 const PALETTE = [
   { label: "Purple",  value: "hsl(262 83% 68%)" },
@@ -32,12 +33,15 @@ const PALETTE = [
 ];
 
 const BG_OPTIONS = [
-  { label: "Dark",    value: "hsl(240 10% 4%)"   },
-  { label: "Navy",    value: "hsl(222 47% 8%)"   },
-  { label: "Charcoal",value: "hsl(220 13% 12%)"  },
-  { label: "Slate",   value: "hsl(215 28% 17%)"  },
-  { label: "White",   value: "hsl(0 0% 97%)"     },
+  { label: "Dark",     value: "hsl(240 10% 4%)"  },
+  { label: "Navy",     value: "hsl(222 47% 8%)"  },
+  { label: "Charcoal", value: "hsl(220 13% 12%)" },
+  { label: "Slate",    value: "hsl(215 28% 17%)" },
+  { label: "White",    value: "hsl(0 0% 97%)"    },
 ];
+
+// Separate mermaid counter so it doesn't clash with Concepts page
+let wbMermaidCounter = 0;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -54,32 +58,51 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDiagramPicker, setShowDiagramPicker] = useState(false);
 
+  // Local SVG store — seed from whatever was passed in (pre-rendered cache)
+  const [svgStore, setSvgStore] = useState<Record<string, string>>(() =>
+    Object.fromEntries(diagrams.filter((d) => d.svg).map((d) => [d.id, d.svg]))
+  );
+
   const lastPos = useRef<{ x: number; y: number } | null>(null);
 
-  // ─── Escape key ────────────────────────────────────────────────────────────
+  // ─── Escape key ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // ─── Draw diagram SVG onto canvas ─────────────────────────────────────────
+  // ─── Render any missing diagram via Mermaid ──────────────────────────────
+  // Pre-render ALL diagrams upfront so switching is instant
+  useEffect(() => {
+    diagrams.forEach((d) => {
+      if (svgStore[d.id]) return;
+      const diagramText = (d as any).diagram as string | undefined;
+      if (!diagramText) return;
+      const id = `wb-mermaid-${++wbMermaidCounter}`;
+      mermaid.render(id, diagramText).then(({ svg }) => {
+        setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
+      }).catch(() => {});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─── Draw background + diagram onto canvas ───────────────────────────────
   const drawDiagramOnCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const diagram = diagrams[selectedDiagramIdx];
-
-    // Fill background
+    // 1. Fill background colour
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (!diagram?.svg) return;
+    // 2. Draw the diagram SVG centred on top
+    const svgStr = svgStore[diagrams[selectedDiagramIdx]?.id ?? ""];
+    if (!svgStr) return;
 
-    // Convert SVG string to image
-    const blob = new Blob([diagram.svg], { type: "image/svg+xml" });
+    const blob = new Blob([svgStr], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
@@ -94,27 +117,27 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       ctx.drawImage(img, x, y, drawW, drawH);
       URL.revokeObjectURL(url);
     };
+    img.onerror = () => URL.revokeObjectURL(url);
     img.src = url;
-  }, [diagrams, selectedDiagramIdx, bg]);
+  }, [diagrams, selectedDiagramIdx, bg, svgStore]);
 
-  // ─── Resize canvas to container ────────────────────────────────────────────
+  // ─── Resize canvas to container ─────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
-
     const rect = container.getBoundingClientRect();
     canvas.width = rect.width;
     canvas.height = rect.height;
     drawDiagramOnCanvas();
   }, [drawDiagramOnCanvas]);
 
-  // ─── Clear & redraw when diagram / bg changes ──────────────────────────────
+  // ─── Redraw when diagram / bg / svgStore changes ─────────────────────────
   useEffect(() => {
     drawDiagramOnCanvas();
   }, [drawDiagramOnCanvas]);
 
-  // ─── Pointer helpers ───────────────────────────────────────────────────────
+  // ─── Pointer helpers ─────────────────────────────────────────────────────
   function getPos(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = canvasRef.current!.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -165,18 +188,19 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     if (ctx) ctx.globalCompositeOperation = "source-over";
   }
 
-  // ─── Clear drawings (re-draw diagram) ─────────────────────────────────────
+  // Clear = redraw diagram (removes all annotations)
   function clearCanvas() {
     drawDiagramOnCanvas();
   }
 
-  const tools: { id: Tool; icon: React.ReactNode; label: string }[] = [
+  const toolButtons: { id: Tool; icon: React.ReactNode; label: string }[] = [
     { id: "draw",      icon: <Pencil className="h-4 w-4" />,      label: "Draw"      },
     { id: "highlight", icon: <Highlighter className="h-4 w-4" />, label: "Highlight" },
     { id: "erase",     icon: <Trash2 className="h-4 w-4" />,      label: "Erase"     },
   ];
 
   const selectedDiagram = diagrams[selectedDiagramIdx];
+  const currentSvgReady = !!(svgStore[selectedDiagram?.id ?? ""]);
 
   return (
     <AnimatePresence>
@@ -232,7 +256,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
 
             {/* Tools */}
             <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-background p-0.5">
-              {tools.map((t) => (
+              {toolButtons.map((t) => (
                 <button
                   key={t.id}
                   title={t.label}
@@ -368,6 +392,12 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
 
           {/* ── Canvas ── */}
           <div ref={containerRef} className="flex-1 overflow-hidden relative">
+            {/* Loading state while SVG is rendering */}
+            {!currentSvgReady && (
+              <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+                <span className="text-xs text-muted-foreground animate-pulse">Rendering diagram…</span>
+              </div>
+            )}
             <canvas
               ref={canvasRef}
               className={cn(
