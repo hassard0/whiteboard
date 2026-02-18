@@ -4,7 +4,7 @@ import { getTemplateById, generateEnvId } from "@/lib/demo-templates";
 import { AUTOPILOT_SCRIPTS } from "@/lib/autopilot-scripts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, RotateCcw, Shield, Send, Share2, Loader2 } from "lucide-react";
+import { ArrowLeft, RotateCcw, Shield, Send, Share2, Loader2, BookOpen } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -85,6 +85,7 @@ export default function DemoPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [pendingToolContext, setPendingToolContext] = useState<any>(null);
@@ -430,6 +431,50 @@ export default function DemoPage() {
     toast.success("Snapshot link copied to clipboard");
   };
 
+
+
+  const handleDownloadScript = async () => {
+    setIsGeneratingScript(true);
+    toast.info("Generating demo script…");
+    try {
+      const SCRIPT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-demo-script`;
+      const resp = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          template,
+          autopilotScript: customAutopilot || (templateId ? AUTOPILOT_SCRIPTS[templateId] : undefined),
+          customDemo,
+        }),
+      });
+
+      if (!resp.ok) throw new Error(await resp.text());
+
+      const { script, templateName } = await resp.json();
+
+      // Download as markdown file
+      const blob = new Blob([script], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${templateName.replace(/\s+/g, "-").toLowerCase()}-demo-script.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success("Demo script downloaded!");
+    } catch (e) {
+      console.error("Script generation error:", e);
+      toast.error("Failed to generate script. Please try again.");
+    } finally {
+      setIsGeneratingScript(false);
+    }
+  };
+
   // Autopilot handlers
   const handleAutopilotStart = () => {
     setAutopilotActive(true);
@@ -475,6 +520,20 @@ export default function DemoPage() {
               {f.name}
             </Badge>
           ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDownloadScript}
+            disabled={isGeneratingScript}
+            title="Download AI-generated demo script"
+          >
+            {isGeneratingScript ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <BookOpen className="mr-1 h-4 w-4" />
+            )}
+            Script
+          </Button>
           <Button variant="ghost" size="sm" onClick={handleShare}>
             <Share2 className="mr-1 h-4 w-4" /> Share
           </Button>
