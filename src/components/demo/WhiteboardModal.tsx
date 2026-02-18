@@ -74,6 +74,9 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   const isPanning = useRef(false);
   const panStart = useRef<{ x: number; y: number } | null>(null);
   const canvasSize = useRef({ w: 0, h: 0 });
+  // Highlight: snapshot canvas before stroke + accumulate points to draw as one path
+  const highlightSnapshot = useRef<ImageData | null>(null);
+  const highlightPoints = useRef<{ x: number; y: number }[]>([]);
 
   // ─── Escape key ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -196,8 +199,17 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       annotationCanvasRef.current?.setPointerCapture(e.pointerId);
       return;
     }
+    const pos = getPos(e);
+    // For highlight: snapshot current canvas so we can redraw the full path each frame
+    if (tool === "highlight") {
+      const ctx = annotationCanvasRef.current?.getContext("2d");
+      if (ctx) {
+        highlightSnapshot.current = ctx.getImageData(0, 0, canvasSize.current.w, canvasSize.current.h);
+      }
+      highlightPoints.current = [pos];
+    }
     setIsDrawing(true);
-    lastPos.current = getPos(e);
+    lastPos.current = pos;
     annotationCanvasRef.current?.setPointerCapture(e.pointerId);
   }
 
@@ -217,27 +229,45 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     if (!ctx || !canvas) return;
 
     const pos = getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(lastPos.current.x, lastPos.current.y);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
 
-    if (tool === "erase") {
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.strokeStyle = "rgba(0,0,0,1)";
-      ctx.lineWidth = strokeWidth * 6;
-    } else if (tool === "highlight") {
-      ctx.globalCompositeOperation = "source-over";
-      ctx.strokeStyle = color.replace(")", " / 0.35)").replace("hsl(", "hsl(");
-      ctx.lineWidth = strokeWidth * 5;
-    } else {
+    if (tool === "highlight") {
+      // Restore to pre-stroke snapshot and redraw the entire path as one polyline
+      highlightPoints.current.push(pos);
+      if (highlightSnapshot.current) {
+        ctx.putImageData(highlightSnapshot.current, 0, 0);
+      }
+      const pts = highlightPoints.current;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.globalAlpha = 0.35;
       ctx.globalCompositeOperation = "source-over";
       ctx.strokeStyle = color;
-      ctx.lineWidth = strokeWidth;
+      ctx.lineWidth = strokeWidth * 5;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(lastPos.current.x, lastPos.current.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      if (tool === "erase") {
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.strokeStyle = "rgba(0,0,0,1)";
+        ctx.lineWidth = strokeWidth * 6;
+      } else {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.strokeStyle = color;
+        ctx.lineWidth = strokeWidth;
+      }
+      ctx.stroke();
+      ctx.globalCompositeOperation = "source-over";
     }
 
-    ctx.stroke();
     lastPos.current = pos;
   }
 
@@ -247,10 +277,16 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       panStart.current = null;
       return;
     }
+    // Commit highlight snapshot
+    highlightSnapshot.current = null;
+    highlightPoints.current = [];
     setIsDrawing(false);
     lastPos.current = null;
     const ctx = annotationCanvasRef.current?.getContext("2d");
-    if (ctx) ctx.globalCompositeOperation = "source-over";
+    if (ctx) {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+    }
   }
 
   // Clear only the annotation canvas
