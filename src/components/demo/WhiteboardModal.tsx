@@ -86,28 +86,26 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // ─── Pre-render all diagrams via Mermaid (sequentially to avoid conflicts) ──
+  // ─── All diagrams are pre-rendered by Concepts.tsx before the modal opens ───
+  // No additional Mermaid rendering needed here — the svgStore is seeded from the
+  // fully-populated renderedSvgCache. If a diagram is still missing for some reason,
+  // we attempt a single render as fallback (sequentially to avoid Mermaid conflicts).
   useEffect(() => {
-    const toRender = diagrams.filter((d) => !svgStore[d.id] && d.diagram);
-    if (toRender.length === 0) return;
-
+    const missing = diagrams.filter((d) => !svgStore[d.id] && d.diagram);
+    if (missing.length === 0) return;
     let cancelled = false;
-    const renderNext = async (idx: number) => {
-      if (cancelled || idx >= toRender.length) return;
-      const d = toRender[idx];
-      const diagramText = d.diagram!;
-      const id = `wb-mermaid-${++wbMermaidCounter}`;
-      try {
-        const { svg } = await mermaid.render(id, diagramText);
-        if (!cancelled) {
-          setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
+    (async () => {
+      for (const d of missing) {
+        if (cancelled) break;
+        try {
+          const id = `wb-fallback-${++wbMermaidCounter}`;
+          const { svg } = await mermaid.render(id, d.diagram!);
+          if (!cancelled) setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
+        } catch (err) {
+          console.warn(`WhiteboardModal fallback render failed for "${d.name}"`, err);
         }
-      } catch (err) {
-        console.error(`WhiteboardModal: failed to render diagram "${d.name}"`, err);
       }
-      renderNext(idx + 1);
-    };
-    renderNext(0);
+    })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
