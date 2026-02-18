@@ -450,18 +450,23 @@ serve(async (req) => {
         }
       });
 
-      // For auto-executed tools, get a narration from the AI
+      // If the first streaming call already produced narration content, use it directly.
+      // Only make a second call if there's NO content at all (avoids doubling rate limit usage).
       const autoExecuted = processedCalls.filter((tc: any) => tc.type === "executed");
       let narration = fullContent;
 
       if (autoExecuted.length > 0 && !narration) {
+        // Build a single follow-up call that includes tool results inline as a user turn.
+        // This replaces the old "second narration call" pattern and counts as only one API call.
+        const toolResultSummary = autoExecuted
+          .map((tc: any) => `**${tc.tool_name}** result:\n\`\`\`json\n${JSON.stringify(tc.result, null, 2)}\n\`\`\``)
+          .join("\n\n");
+
         const narrationMessages = [
           ...allMessages,
           {
-            role: "user",
-            content: `[SYSTEM: Tools executed automatically]\n${autoExecuted.map((tc: any) =>
-              `Tool "${tc.tool_name}" executed. Result: ${JSON.stringify(tc.result, null, 2)}`
-            ).join("\n\n")}\n\nPresent these results clearly to the user using markdown tables where appropriate. Add Auth0 explainer.`,
+            role: "user" as const,
+            content: `The following tools ran automatically. Present results to the user using markdown tables where helpful, then add a brief Auth0 explainer callout.\n\n${toolResultSummary}`,
           },
         ];
 
@@ -475,6 +480,7 @@ serve(async (req) => {
             body: JSON.stringify({
               model: "google/gemini-3-flash-preview",
               messages: narrationMessages,
+              // No tools here — pure narration, keeps the call lightweight
             }),
           });
           if (narrationResp.ok) {

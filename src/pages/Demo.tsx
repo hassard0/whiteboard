@@ -232,25 +232,8 @@ export default function DemoPage() {
       }
     }
 
-    if (toolCalls.length > 0 && toolCalls.every((tc) => tc.status === "completed")) {
-      const executedResults = (data.tool_calls || [])
-        .filter((tc: any) => tc.type === "executed")
-        .map((tc: any) => ({
-          decision: "approved",
-          tool_id: tc.tool_id,
-          args: tc.args,
-        }));
-
-      const followUp = await callAgent(
-        [...chatHistory, { role: "assistant", content: data.content || "I'll use some tools to help." }],
-        executedResults,
-      );
-
-      if (followUp?.content) {
-        return { content: followUp.content, toolCalls, awaitingApproval: false };
-      }
-    }
-
+    // The edge function now handles narration for auto-executed tools in a single call.
+    // We just return the content it already gave us — no second callAgent needed.
     return { content: data.content, toolCalls, awaitingApproval: false };
   };
 
