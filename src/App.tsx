@@ -64,6 +64,14 @@ const App = () => (
               }
             />
             <Route
+              path="/wizard/edit/:demoId"
+              element={
+                <ProtectedRoute>
+                  <WizardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin"
               element={
                 <ProtectedRoute>

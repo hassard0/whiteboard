@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useCallback, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import { supabase } from "@/integrations/supabase/client";
 import { generateEnvId } from "@/lib/demo-templates";
@@ -80,9 +80,12 @@ const STEPS = [
 
 export default function WizardPage() {
   const navigate = useNavigate();
+  const { demoId } = useParams<{ demoId: string }>();
   const { user } = useAuth0();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [editingDemo, setEditingDemo] = useState<any | null>(null);
+  const [loadingEdit, setLoadingEdit] = useState(!!demoId);
 
   const [state, setState] = useState<WizardState>({
     name: "",
@@ -98,6 +101,53 @@ export default function WizardPage() {
     autopilotSteps: [],
     isPublic: true,
   });
+
+  // Load existing demo when editing
+  useEffect(() => {
+    if (!demoId) return;
+    setLoadingEdit(true);
+    supabase
+      .from("demo_environments")
+      .select("*")
+      .eq("id", demoId)
+      .single()
+      .then(({ data, error }) => {
+        if (error || !data) {
+          setLoadingEdit(false);
+          return;
+        }
+        setEditingDemo(data);
+        const cfg = data.config_overrides as any;
+        if (cfg) {
+          // Map stored tools back to ToolTemplate shape
+          const allTools: ToolTemplate[] = (cfg.tools || []).map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            description: t.description,
+            industry: t.industry || "generic",
+            requiresApproval: t.requiresApproval ?? false,
+            scopes: t.scopes || [],
+            inputSchema: t.inputSchema || {},
+          }));
+
+          setState({
+            name: cfg.name || "",
+            description: cfg.description || "",
+            industry: cfg.industry || "",
+            color: cfg.color || "hsl(262 83% 58%)",
+            icon: cfg.icon || "Sparkles",
+            selectedTools: allTools,
+            customTools: [],
+            selectedFeatures: (cfg.auth0Features || []).map((f: any) => f.id),
+            systemPrompt: cfg.systemPromptParts?.[0] || cfg.systemPrompt || "",
+            knowledgePack: cfg.knowledgePack || "",
+            autopilotSteps: cfg.autopilotSteps || [],
+            isPublic: cfg.isPublic !== false,
+          });
+        }
+        setLoadingEdit(false);
+      });
+  }, [demoId]);
 
   const update = useCallback(<K extends keyof WizardState>(key: K, value: WizardState[K]) => {
     setState((prev) => ({ ...prev, [key]: value }));
@@ -189,9 +239,6 @@ export default function WizardPage() {
     const allTools = [...state.selectedTools, ...state.customTools];
     const features = AUTH0_FEATURE_LIBRARY.filter((f) => state.selectedFeatures.includes(f.id));
 
-    const templateId = `custom-${Date.now()}`;
-    const envId = generateEnvId(user.sub, templateId);
-
     const customConfig = {
       wizard: true,
       name: state.name,
@@ -208,26 +255,43 @@ export default function WizardPage() {
     };
 
     try {
-      const { error } = await supabase
-        .from("demo_environments")
-        .upsert({
-          env_id: envId,
-          auth0_sub: user.sub,
-          template_id: templateId,
-          env_type: "custom",
-          config_overrides: customConfig as any,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "env_id" });
+      if (editingDemo) {
+        // Update existing demo
+        const existingCfg = editingDemo.config_overrides as any;
+        const { error } = await supabase
+          .from("demo_environments")
+          .update({
+            config_overrides: { ...existingCfg, ...customConfig } as any,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", editingDemo.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast.success("Demo created!");
-      // Navigate to demo with the custom config
-      navigate(`/demo/${templateId}`, {
-        state: {
-          customDemo: customConfig,
-        },
-      });
+        toast.success("Demo updated!");
+        const templateId = editingDemo.template_id;
+        navigate(`/demo/${templateId}`, { state: { customDemo: customConfig } });
+      } else {
+        // Create new demo
+        const templateId = `custom-${Date.now()}`;
+        const envId = generateEnvId(user.sub, templateId);
+
+        const { error } = await supabase
+          .from("demo_environments")
+          .upsert({
+            env_id: envId,
+            auth0_sub: user.sub,
+            template_id: templateId,
+            env_type: "custom",
+            config_overrides: customConfig as any,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "env_id" });
+
+        if (error) throw error;
+
+        toast.success("Demo created!");
+        navigate(`/demo/${templateId}`, { state: { customDemo: customConfig } });
+      }
     } catch (e: any) {
       toast.error("Failed to save: " + e.message);
     } finally {
@@ -236,6 +300,14 @@ export default function WizardPage() {
   };
 
   // ─── Render ───
+  if (loadingEdit) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -248,7 +320,7 @@ export default function WizardPage() {
             <img src={auth0Shield} alt="Auth0" className="h-5 w-5 invert" />
             <div>
               <h1 className="text-sm font-semibold text-foreground">Demo Wizard</h1>
-              <span className="text-xs text-muted-foreground">Create a custom demo</span>
+              <span className="text-xs text-muted-foreground">{editingDemo ? "Edit your demo" : "Create a custom demo"}</span>
             </div>
           </div>
         </div>
