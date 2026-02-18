@@ -522,10 +522,29 @@ export default function DemoPage() {
 
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: `${template.color}15` }}>
-                    <Shield className="h-8 w-8" style={{ color: template.color }} />
-                  </div>
+                  {/* Logo / icon */}
+                  {customDemo?.customerLogo ? (
+                    <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-2xl overflow-hidden" style={{ backgroundColor: `${template.color}12` }}>
+                      <img
+                        src={customDemo.customerLogo}
+                        alt={customDemo.customerName || template.name}
+                        className="h-20 w-20 object-contain"
+                        onError={(e) => {
+                          const el = e.currentTarget as HTMLImageElement;
+                          el.style.display = "none";
+                          el.parentElement!.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="${template.color}" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`;
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: `${template.color}15` }}>
+                      <Shield className="h-8 w-8" style={{ color: template.color }} />
+                    </div>
+                  )}
                   <h2 className="text-xl font-semibold text-foreground">{template.name}</h2>
+                  {customDemo?.customerName && (
+                    <p className="mt-0.5 text-sm text-muted-foreground font-medium">{customDemo.customerName}</p>
+                  )}
                   <p className="mt-2 max-w-md text-sm text-muted-foreground">{template.knowledgePack}</p>
                   <div className="mt-6 flex flex-wrap justify-center gap-2">
                     {template.tools.map((tool) => (
