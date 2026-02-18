@@ -45,7 +45,8 @@ interface Auth0User {
   blocked?: boolean;
 }
 
-const AUTH0_DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN || "";
+// Hardcoded — Auth0 Management API audience for this tenant
+const AUTH0_MGMT_AUDIENCE = "https://ian-h0001.us.auth0.com/api/v2/";
 
 async function callAdminApi(
   getAccessToken: (opts?: object) => Promise<string>,
@@ -53,11 +54,11 @@ async function callAdminApi(
   action: string,
   body?: object
 ) {
-  // Request with audience so Auth0 returns a real JWT (not an opaque token)
-  // The sub claim in this JWT is used server-side to verify admin role
+  // Requesting with audience forces Auth0 to return a real JWT (with sub claim)
+  // instead of an opaque token — required for server-side admin verification
   const token = await getAccessToken({
     authorizationParams: {
-      audience: `https://${AUTH0_DOMAIN}/api/v2/`,
+      audience: AUTH0_MGMT_AUDIENCE,
     },
   });
   const url = `${SUPABASE_URL}/functions/v1/admin-users?action=${action}`;
