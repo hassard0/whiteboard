@@ -416,106 +416,133 @@ export default function Dashboard() {
 
         {/* All Public Demos Tab */}
         {(activeTab === "public" || activeTab === "all") && (
-          <div>
-            {activeTab === "all" && publicDemos.length > 0 && (
-              <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Globe className="h-5 w-5 text-muted-foreground" /> All Public Demos
-              </h2>
-            )}
-            {publicDemos.length === 0 && activeTab !== "all" ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-secondary">
-                  <Globe className="h-7 w-7 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">No public demos yet</h3>
-                <p className="text-muted-foreground text-sm">Be the first to create a public custom demo.</p>
-              </div>
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
-                {publicDemos.map((demo, i) => {
-                  const cfg = demo.config_overrides as any;
-                  const isOwner = demo.auth0_sub === user?.sub;
-                  return (
-                    <motion.div
-                      key={demo.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4, delay: i * 0.08 }}
-                      className="flex"
-                    >
-                      <Card className="group flex flex-col w-full border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10">
-                        <CardHeader>
-                          <div className="mb-3 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-11 w-11 items-center justify-center rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${cfg.color || "hsl(262 83% 58%)"}15` }}>
-                                {cfg.customerLogo ? (
-                                  <img
-                                    src={cfg.customerLogo}
-                                    alt={cfg.customerName || cfg.name}
-                                    className="h-8 w-8 object-contain"
-                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                                  />
-                                ) : (
-                                  <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
-                                )}
-                              </div>
-                              {cfg.customerName && (
-                                <span className="text-xs text-muted-foreground font-medium">{cfg.customerName}</span>
-                              )}
-                            </div>
-                            {isOwner && (
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleEditClick(demo); }}
-                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
-                                  title="Edit demo"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setDeleteDemo(demo); }}
-                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                  title="Delete demo"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          <CardTitle
-                            className="text-lg cursor-pointer"
-                            onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
-                          >
-                            {cfg.name}
-                          </CardTitle>
-                          <CardDescription>{cfg.description}</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex flex-col flex-1">
-                          <div className="flex flex-wrap gap-2">
-                            {(cfg.auth0Features || []).map((f: any) => (
-                              <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
-                            ))}
-                          </div>
-                          <div className="mt-auto pt-4">
-                            <Button
-                              size="sm"
-                              className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
-                              onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
-                            >
-                              Launch Demo
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <PublicDemosSection
+            demos={activeTab === "all" ? publicDemos.filter((d: any) => d.auth0_sub !== user?.sub) : publicDemos}
+            activeTab={activeTab}
+            currentUserId={user?.sub}
+            onEdit={handleEditClick}
+            onDelete={(demo) => setDeleteDemo(demo)}
+            onLaunch={(demo) => navigate(`/demo/${demo.template_id}`, { state: { customDemo: demo.config_overrides } })}
+          />
         )}
       </main>
     </DashboardLayout>
   );
 }
 
+// ── PublicDemosSection ────────────────────────────────────────────────────────
+function PublicDemosSection({
+  demos,
+  activeTab,
+  currentUserId,
+  onEdit,
+  onDelete,
+  onLaunch,
+}: {
+  demos: any[];
+  activeTab: string;
+  currentUserId?: string;
+  onEdit: (demo: any) => void;
+  onDelete: (demo: any) => void;
+  onLaunch: (demo: any) => void;
+}) {
+  return (
+    <div>
+      {activeTab === "all" && demos.length > 0 && (
+        <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+          <Globe className="h-5 w-5 text-muted-foreground" /> All Public Demos
+        </h2>
+      )}
+      {demos.length === 0 && activeTab !== "all" ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-secondary">
+            <Globe className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">No public demos yet</h3>
+          <p className="text-muted-foreground text-sm">Be the first to create a public custom demo.</p>
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+          {demos.map((demo, i) => {
+            const cfg = demo.config_overrides as any;
+            const isOwner = demo.auth0_sub === currentUserId;
+            return (
+              <motion.div
+                key={demo.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: i * 0.08 }}
+                className="flex"
+              >
+                <Card className="group flex flex-col w-full border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10">
+                  <CardHeader>
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${cfg.color || "hsl(262 83% 58%)"}15` }}>
+                          {cfg.customerLogo ? (
+                            <img
+                              src={cfg.customerLogo}
+                              alt={cfg.customerName || cfg.name}
+                              className="h-8 w-8 object-contain"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                            />
+                          ) : (
+                            <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
+                          )}
+                        </div>
+                        {cfg.customerName && (
+                          <span className="text-xs text-muted-foreground font-medium">{cfg.customerName}</span>
+                        )}
+                      </div>
+                      {isOwner && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onEdit(demo); }}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
+                            title="Edit demo"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onDelete(demo); }}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            title="Delete demo"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <CardTitle
+                      className="text-lg cursor-pointer"
+                      onClick={() => onLaunch(demo)}
+                    >
+                      {cfg.name}
+                    </CardTitle>
+                    <CardDescription>{cfg.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col flex-1">
+                    <div className="flex flex-wrap gap-2">
+                      {(cfg.auth0Features || []).map((f: any) => (
+                        <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
+                      ))}
+                    </div>
+                    <div className="mt-auto pt-4">
+                      <Button
+                        size="sm"
+                        className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
+                        onClick={() => onLaunch(demo)}
+                      >
+                        Launch Demo
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
