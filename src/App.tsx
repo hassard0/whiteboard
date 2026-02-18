@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import DemoPage from "./pages/Demo";
 import BuilderPage from "./pages/Builder";
 import WizardPage from "./pages/Wizard";
+import ConceptsPage from "./pages/Concepts";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/concepts"
+              element={
+                <ProtectedRoute>
+                  <ConceptsPage />
                 </ProtectedRoute>
               }
             />
