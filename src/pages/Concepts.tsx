@@ -325,13 +325,13 @@ const DEMO_FLOWS = [
     diagram: `graph TD
   U(["👤 User"]) -->|Find me running shoes| AG(["🤖 Shopper"])
   AG -->|Request identity context| AZ["Auth0"]
-  AZ -->|Filtered: tier=premium, size=10| AG
-  AG -->|search_products + recommendations| FGA{"FGA Check\ncatalog:read"}
+  AZ -->|"Filtered: tier=premium, size=10"| AG
+  AG -->|"search_products + recommendations"| FGA{"FGA Check"}
   FGA -->|✅ Allowed| CAT["Product Catalog"]
   CAT -->|Personalized results| AG
   AG -->|Present options| U
   U -->|Order the Nike ones| AG
-  AG -->|place_order| AA{"Async Authorization\npayments:charge"}
+  AG -->|place_order| AA{"Async Authorization"}
   AA -->|Show order + price| U
   U -->|✅ Approve| AA
   AA -->|Token Vault payment token| PAY["Payment API"]
@@ -345,17 +345,17 @@ const DEMO_FLOWS = [
     description: "Scoped tool access with Token Vault for GitHub, full audit trail for compliance.",
     diagram: `graph TD
   U(["👤 User"]) -->|Review and commit my changes| AG(["🤖 Dev Copilot"])
-  AG -->|list_repos| FGA1{"FGA Check\nrepos:read"}
+  AG -->|list_repos| FGA1{"FGA Check repos:read"}
   FGA1 -->|✅ Allowed| GH["GitHub via Token Vault"]
   GH -->|Repo list| AG
   AG -->|review_pr| PR["PR Review"]
   PR -->|Review complete| AG
-  AG -->|create_commit repos:write| AA{"Async Authorization"}
+  AG -->|"create_commit repos:write"| AA{"Async Authorization"}
   AA -->|Show diff + commit message| U
   U -->|✅ Approve| AA
   AA -->|Token Vault: GitHub PAT| GHAPI["GitHub API"]
   GHAPI -->|Commit created| AG
-  AG -->|Log: user+agent+action| AUD[("Audit Trail")]`,
+  AG -->|"Log: user+agent+action"| AUD[("Audit Trail")]`,
   },
   {
     id: "generic-agent",

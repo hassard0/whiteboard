@@ -74,7 +74,17 @@ async function flush() {
   processing = false;
 }
 
+// Sanitize common Mermaid v11 syntax issues before rendering.
+function sanitizeDiagram(text: string): string {
+  // Replace literal \n inside node shape brackets {} [] () with a space
+  // Mermaid v11 doesn't support newlines inside node labels in most cases
+  return text.replace(/(\{[^}]*?)\\n([^}]*?\})/g, "$1 $2")
+             .replace(/(\[[^\]]*?)\\n([^\]]*?\])/g, "$1 $2")
+             .replace(/(\([^)]*?)\\n([^)]*?\))/g, "$1 $2");
+}
+
 export function renderMermaid(diagramText: string): Promise<string> {
+  const sanitized = sanitizeDiagram(diagramText);
   return new Promise((resolve, reject) => {
     queue.push(async () => {
       const id = `mermaid-q-${++counter}`;
@@ -86,7 +96,7 @@ export function renderMermaid(diagramText: string): Promise<string> {
       container.style.cssText = "position:fixed;top:-9999px;left:-9999px;visibility:hidden;";
       document.body.appendChild(container);
       try {
-        const result = await withTimeout(mermaid.render(id, diagramText), 15000);
+        const result = await withTimeout(mermaid.render(id, sanitized), 15000);
         const svg = result?.svg ?? "";
         if (!svg) throw new Error("mermaid.render returned empty SVG");
         resolve(svg);
