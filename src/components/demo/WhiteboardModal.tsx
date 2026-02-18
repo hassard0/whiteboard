@@ -173,11 +173,17 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   }, []);
 
   // ─── Pointer helpers — operate on annotation canvas ──────────────────────
+  // getBoundingClientRect() returns the *visual* (post-CSS-transform) position,
+  // so dividing by zoom converts from visual pixels to canvas pixels.
   function getPos(e: React.PointerEvent<HTMLCanvasElement>) {
-    const rect = annotationCanvasRef.current!.getBoundingClientRect();
+    const canvas = annotationCanvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    // rect.width is the CSS-transformed width; canvas.width is the real pixel width
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     return {
-      x: (e.clientX - rect.left) / zoom,
-      y: (e.clientY - rect.top) / zoom,
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
     };
   }
 
