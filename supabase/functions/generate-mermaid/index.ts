@@ -54,8 +54,24 @@ Rules:
     const data = await response.json();
     let mermaid = data.choices?.[0]?.message?.content?.trim() ?? "";
 
-    // Strip any accidental markdown fences
-    mermaid = mermaid.replace(/^```(?:mermaid)?\s*/i, "").replace(/\s*```$/, "").trim();
+    // Strip any accidental markdown fences (multiline-safe)
+    mermaid = mermaid
+      .replace(/^```(?:mermaid)?\s*/im, "")
+      .replace(/\s*```\s*$/m, "")
+      .trim();
+
+    // If the model still wrapped in a code block somewhere in the middle, extract it
+    const fenceMatch = mermaid.match(/```(?:mermaid)?\s*([\s\S]+?)\s*```/i);
+    if (fenceMatch) mermaid = fenceMatch[1].trim();
+
+    // Strip any leading prose before the diagram keyword
+    const diagramKeywords = ["graph ", "sequenceDiagram", "flowchart ", "erDiagram", "classDiagram", "stateDiagram", "gantt", "pie ", "gitGraph", "mindmap", "timeline", "journey"];
+    for (const kw of diagramKeywords) {
+      const idx = mermaid.indexOf(kw);
+      if (idx > 0) { mermaid = mermaid.slice(idx); break; }
+    }
+
+    if (!mermaid) throw new Error("AI returned empty diagram content");
 
     return new Response(JSON.stringify({ mermaid }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
