@@ -67,13 +67,14 @@ export function renderMermaid(diagramText: string): Promise<string> {
   return new Promise((resolve, reject) => {
     queue.push(async () => {
       const id = `mermaid-q-${++counter}`;
-      // Remove any stale element with this ID before rendering
       document.getElementById(id)?.remove();
       try {
-        const { svg } = await mermaid.render(id, diagramText);
+        const result = await mermaid.render(id, diagramText);
+        const svg = result?.svg ?? "";
         if (!svg) throw new Error("mermaid.render returned empty SVG");
         resolve(svg);
       } catch (err) {
+        console.error(`[mermaid-queue] render failed:`, err);
         reject(err);
       } finally {
         document.getElementById(id)?.remove();
