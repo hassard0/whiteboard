@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown } from "lucide-react";
+import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown, ZoomIn, ZoomOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import mermaid from "mermaid";
 
@@ -40,14 +40,19 @@ const BG_OPTIONS = [
   { label: "White",    value: "hsl(0 0% 97%)"    },
 ];
 
-// Separate mermaid counter so it doesn't clash with Concepts page
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 4;
+
 let wbMermaidCounter = 0;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Two-canvas approach: bottom = diagram (redrawn on zoom/bg changes), top = annotations (user strokes)
+  const diagramCanvasRef = useRef<HTMLCanvasElement>(null);
+  const annotationCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
   const [selectedDiagramIdx, setSelectedDiagramIdx] = useState(0);
   const [tool, setTool] = useState<Tool>("draw");
   const [color, setColor] = useState(PALETTE[0].value);
@@ -57,13 +62,15 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDiagramPicker, setShowDiagramPicker] = useState(false);
+  const [zoom, setZoom] = useState(1);
 
-  // Local SVG store — seed from whatever was passed in (pre-rendered cache)
+  // Local SVG store — seed from pre-rendered cache passed in
   const [svgStore, setSvgStore] = useState<Record<string, string>>(() =>
     Object.fromEntries(diagrams.filter((d) => d.svg).map((d) => [d.id, d.svg]))
   );
 
   const lastPos = useRef<{ x: number; y: number } | null>(null);
+  const canvasSize = useRef({ w: 0, h: 0 });
 
   // ─── Escape key ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -72,8 +79,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // ─── Render any missing diagram via Mermaid ──────────────────────────────
-  // Pre-render ALL diagrams upfront so switching is instant
+  // ─── Pre-render all diagrams via Mermaid ─────────────────────────────────
   useEffect(() => {
     diagrams.forEach((d) => {
       if (svgStore[d.id]) return;
@@ -87,18 +93,20 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Draw background + diagram onto canvas ───────────────────────────────
-  const drawDiagramOnCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
+  // ─── Draw diagram onto the bottom (diagram) canvas ───────────────────────
+  const drawDiagram = useCallback(() => {
+    const canvas = diagramCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // 1. Fill background colour
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const { w, h } = canvasSize.current;
+    ctx.clearRect(0, 0, w, h);
 
-    // 2. Draw the diagram SVG centred on top
+    // Fill background
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
     const svgStr = svgStore[diagrams[selectedDiagramIdx]?.id ?? ""];
     if (!svgStr) return;
 
@@ -106,14 +114,16 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
-      const padding = 40;
-      const maxW = canvas.width - padding * 2;
-      const maxH = canvas.height - padding * 2;
-      const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+      // Use 90% of canvas (much bigger than before)
+      const padding = Math.min(w, h) * 0.05;
+      const maxW = w - padding * 2;
+      const maxH = h - padding * 2;
+      // Allow scale > 1 to fill the space
+      const scale = Math.min(maxW / img.width, maxH / img.height);
       const drawW = img.width * scale;
       const drawH = img.height * scale;
-      const x = (canvas.width - drawW) / 2;
-      const y = (canvas.height - drawH) / 2;
+      const x = (w - drawW) / 2;
+      const y = (h - drawH) / 2;
       ctx.drawImage(img, x, y, drawW, drawH);
       URL.revokeObjectURL(url);
     };
@@ -121,37 +131,63 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     img.src = url;
   }, [diagrams, selectedDiagramIdx, bg, svgStore]);
 
-  // ─── Resize canvas to container ─────────────────────────────────────────
+  // ─── Initialise / resize canvases ────────────────────────────────────────
   useEffect(() => {
-    const canvas = canvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container) return;
+    const dCanvas = diagramCanvasRef.current;
+    const aCanvas = annotationCanvasRef.current;
+    if (!container || !dCanvas || !aCanvas) return;
+
     const rect = container.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    drawDiagramOnCanvas();
-  }, [drawDiagramOnCanvas]);
+    const w = rect.width;
+    const h = rect.height;
+    canvasSize.current = { w, h };
 
-  // ─── Redraw when diagram / bg / svgStore changes ─────────────────────────
+    dCanvas.width = w;
+    dCanvas.height = h;
+    aCanvas.width = w;
+    aCanvas.height = h;
+
+    drawDiagram();
+  }, [drawDiagram]);
+
+  // Redraw diagram when deps change
   useEffect(() => {
-    drawDiagramOnCanvas();
-  }, [drawDiagramOnCanvas]);
+    drawDiagram();
+  }, [drawDiagram]);
 
-  // ─── Pointer helpers ─────────────────────────────────────────────────────
+  // ─── Scroll to zoom ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +(z + delta).toFixed(2))));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // ─── Pointer helpers — operate on annotation canvas ──────────────────────
   function getPos(e: React.PointerEvent<HTMLCanvasElement>) {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const rect = annotationCanvasRef.current!.getBoundingClientRect();
+    // Adjust for CSS zoom: visual rect is zoomed, but canvas coords are not
+    return {
+      x: (e.clientX - rect.left) / zoom,
+      y: (e.clientY - rect.top) / zoom,
+    };
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     setIsDrawing(true);
     lastPos.current = getPos(e);
-    canvasRef.current?.setPointerCapture(e.pointerId);
+    annotationCanvasRef.current?.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!isDrawing || !lastPos.current) return;
-    const canvas = canvasRef.current;
+    const canvas = annotationCanvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx || !canvas) return;
 
@@ -184,13 +220,14 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   function onPointerUp() {
     setIsDrawing(false);
     lastPos.current = null;
-    const ctx = canvasRef.current?.getContext("2d");
+    const ctx = annotationCanvasRef.current?.getContext("2d");
     if (ctx) ctx.globalCompositeOperation = "source-over";
   }
 
-  // Clear = redraw diagram (removes all annotations)
+  // Clear only the annotation canvas
   function clearCanvas() {
-    drawDiagramOnCanvas();
+    const ctx = annotationCanvasRef.current?.getContext("2d");
+    if (ctx) ctx.clearRect(0, 0, canvasSize.current.w, canvasSize.current.h);
   }
 
   const toolButtons: { id: Tool; icon: React.ReactNode; label: string }[] = [
@@ -367,6 +404,33 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
 
             <div className="h-5 w-px bg-border/60" />
 
+            {/* Zoom controls */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setZoom((z) => Math.max(MIN_ZOOM, +(z - 0.25).toFixed(2)))}
+                className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                title="Zoom out"
+              >
+                <ZoomOut className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setZoom(1)}
+                className="min-w-[40px] rounded-md px-1.5 py-1 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-accent transition-colors text-center"
+                title="Reset zoom"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                onClick={() => setZoom((z) => Math.min(MAX_ZOOM, +(z + 0.25).toFixed(2)))}
+                className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                title="Zoom in"
+              >
+                <ZoomIn className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div className="h-5 w-px bg-border/60" />
+
             {/* Clear */}
             <button
               onClick={clearCanvas}
@@ -376,10 +440,10 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
               <span className="hidden sm:inline">Clear</span>
             </button>
 
-            {/* Spacer + Close */}
+            {/* Spacer + hint + Close */}
             <div className="ml-auto flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground hidden md:block">
-                Click &amp; drag to annotate
+                Scroll to zoom · drag to annotate
               </span>
               <button
                 onClick={onClose}
@@ -390,27 +454,49 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
             </div>
           </div>
 
-          {/* ── Canvas ── */}
-          <div ref={containerRef} className="flex-1 overflow-hidden relative">
-            {/* Loading state while SVG is rendering */}
+          {/* ── Canvas area ── */}
+          <div ref={containerRef} className="flex-1 overflow-hidden relative select-none">
             {!currentSvgReady && (
               <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
                 <span className="text-xs text-muted-foreground animate-pulse">Rendering diagram…</span>
               </div>
             )}
-            <canvas
-              ref={canvasRef}
-              className={cn(
-                "absolute inset-0 w-full h-full",
-                tool === "draw" && "cursor-crosshair",
-                tool === "highlight" && "cursor-cell",
-                tool === "erase" && "cursor-cell",
-              )}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerLeave={onPointerUp}
-            />
+
+            {/* Both canvases scaled together via CSS transform */}
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ transformOrigin: "center center" }}
+            >
+              <div
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "center center",
+                  width: "100%",
+                  height: "100%",
+                  position: "relative",
+                }}
+              >
+                {/* Bottom: diagram + background */}
+                <canvas
+                  ref={diagramCanvasRef}
+                  className="absolute inset-0 w-full h-full"
+                />
+                {/* Top: annotation layer */}
+                <canvas
+                  ref={annotationCanvasRef}
+                  className={cn(
+                    "absolute inset-0 w-full h-full",
+                    tool === "draw" && "cursor-crosshair",
+                    tool === "highlight" && "cursor-cell",
+                    tool === "erase" && "cursor-cell",
+                  )}
+                  onPointerDown={onPointerDown}
+                  onPointerMove={onPointerMove}
+                  onPointerUp={onPointerUp}
+                  onPointerLeave={onPointerUp}
+                />
+              </div>
+            </div>
           </div>
         </motion.div>
       </motion.div>
