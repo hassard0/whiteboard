@@ -63,6 +63,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDiagramPicker, setShowDiagramPicker] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
 
   // Local SVG store — seed from pre-rendered cache passed in
   const [svgStore, setSvgStore] = useState<Record<string, string>>(() =>
@@ -70,6 +71,8 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   );
 
   const lastPos = useRef<{ x: number; y: number } | null>(null);
+  const isPanning = useRef(false);
+  const panStart = useRef<{ x: number; y: number } | null>(null);
   const canvasSize = useRef({ w: 0, h: 0 });
 
   // ─── Escape key ─────────────────────────────────────────────────────────────
@@ -156,7 +159,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     drawDiagram();
   }, [drawDiagram]);
 
-  // ─── Scroll to zoom ───────────────────────────────────────────────────────
+  // ─── Scroll to zoom (centered on cursor) ─────────────────────────────────
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -172,7 +175,6 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   // ─── Pointer helpers — operate on annotation canvas ──────────────────────
   function getPos(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = annotationCanvasRef.current!.getBoundingClientRect();
-    // Adjust for CSS zoom: visual rect is zoomed, but canvas coords are not
     return {
       x: (e.clientX - rect.left) / zoom,
       y: (e.clientY - rect.top) / zoom,
@@ -180,19 +182,35 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    // Right-click (button 2) → pan mode
+    if (e.button === 2) {
+      e.preventDefault();
+      isPanning.current = true;
+      panStart.current = { x: e.clientX, y: e.clientY };
+      annotationCanvasRef.current?.setPointerCapture(e.pointerId);
+      return;
+    }
     setIsDrawing(true);
     lastPos.current = getPos(e);
     annotationCanvasRef.current?.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    // Panning
+    if (isPanning.current && panStart.current) {
+      const dx = e.clientX - panStart.current.x;
+      const dy = e.clientY - panStart.current.y;
+      setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+      panStart.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
+
     if (!isDrawing || !lastPos.current) return;
     const canvas = annotationCanvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx || !canvas) return;
 
     const pos = getPos(e);
-
     ctx.beginPath();
     ctx.moveTo(lastPos.current.x, lastPos.current.y);
     ctx.lineTo(pos.x, pos.y);
@@ -218,6 +236,11 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   }
 
   function onPointerUp() {
+    if (isPanning.current) {
+      isPanning.current = false;
+      panStart.current = null;
+      return;
+    }
     setIsDrawing(false);
     lastPos.current = null;
     const ctx = annotationCanvasRef.current?.getContext("2d");
@@ -276,7 +299,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
                   {diagrams.map((d, i) => (
                     <button
                       key={d.id}
-                      onClick={() => { setSelectedDiagramIdx(i); setShowDiagramPicker(false); }}
+                      onClick={() => { setSelectedDiagramIdx(i); setShowDiagramPicker(false); setPan({ x: 0, y: 0 }); setZoom(1); }}
                       className={cn(
                         "flex w-full items-center px-3 py-2 text-xs text-left hover:bg-accent transition-colors",
                         i === selectedDiagramIdx && "text-primary font-semibold"
@@ -462,14 +485,13 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
               </div>
             )}
 
-            {/* Both canvases scaled together via CSS transform */}
+            {/* Both canvases moved together via CSS transform */}
             <div
               className="absolute inset-0 flex items-center justify-center"
-              style={{ transformOrigin: "center center" }}
             >
               <div
                 style={{
-                  transform: `scale(${zoom})`,
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                   transformOrigin: "center center",
                   width: "100%",
                   height: "100%",
@@ -490,10 +512,12 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
                     tool === "highlight" && "cursor-cell",
                     tool === "erase" && "cursor-cell",
                   )}
+                  onContextMenu={(e) => e.preventDefault()}
                   onPointerDown={onPointerDown}
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
                   onPointerLeave={onPointerUp}
+                  style={{ cursor: isPanning.current ? "grabbing" : undefined }}
                 />
               </div>
             </div>
