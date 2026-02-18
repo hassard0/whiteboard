@@ -47,7 +47,7 @@ const industryIcons: Record<string, React.ElementType> = {
   Plane, Heart, DollarSign, ShoppingCart, Users, Scale, Terminal, Sparkles,
 };
 
-// ─── Wizard State ───
+  // ─── Wizard State ───
 interface WizardState {
   // Step 1
   name: string;
@@ -65,6 +65,8 @@ interface WizardState {
   knowledgePack: string;
   // Step 5
   autopilotSteps: { label: string; message: string; explanation: string; feature: string }[];
+  // Review
+  isPublic: boolean;
 }
 
 const STEPS = [
@@ -94,6 +96,7 @@ export default function WizardPage() {
     systemPrompt: "",
     knowledgePack: "",
     autopilotSteps: [],
+    isPublic: true,
   });
 
   const update = useCallback(<K extends keyof WizardState>(key: K, value: WizardState[K]) => {
@@ -201,6 +204,7 @@ export default function WizardPage() {
       systemPromptParts: [state.systemPrompt],
       knowledgePack: state.knowledgePack,
       autopilotSteps: state.autopilotSteps,
+      isPublic: state.isPublic,
     };
 
     try {
@@ -623,7 +627,7 @@ export default function WizardPage() {
               <div className="space-y-6">
                 <div>
                   <h2 className="text-xl font-bold text-foreground">Review & Launch</h2>
-                  <p className="text-sm text-muted-foreground mt-1">Everything looks good? Launch your custom demo.</p>
+                  <p className="text-sm text-muted-foreground mt-1">Everything looks good? Save and launch your custom demo.</p>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -664,6 +668,18 @@ export default function WizardPage() {
                   </Card>
                 </div>
 
+                {/* Visibility toggle */}
+                <div className="flex items-center justify-between rounded-lg border border-border p-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Make this demo public</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Public demos are visible to all users on the dashboard. Private demos are only visible to you.</p>
+                  </div>
+                  <Switch
+                    checked={state.isPublic}
+                    onCheckedChange={(v) => update("isPublic", v)}
+                  />
+                </div>
+
                 <Button
                   size="lg"
                   onClick={handleLaunch}
@@ -671,9 +687,9 @@ export default function WizardPage() {
                   className="w-full gradient-auth0 text-primary-foreground h-12 text-base font-semibold"
                 >
                   {saving ? (
-                    <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Creating Demo...</>
+                    <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Saving Demo...</>
                   ) : (
-                    <><Rocket className="mr-2 h-5 w-5" /> Launch Demo</>
+                    <><Rocket className="mr-2 h-5 w-5" /> Save and Launch Demo</>
                   )}
                 </Button>
               </div>

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plane, Briefcase, ShoppingBag, Code, Wrench, Plus, Sparkles, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Plane, Briefcase, ShoppingBag, Code, Wrench, Plus, Sparkles, Pencil, Trash2, AlertTriangle, Globe, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { AIMagicModal } from "@/components/demo/AIMagicModal";
 import { EditDemoModal } from "@/components/demo/EditDemoModal";
@@ -20,16 +20,20 @@ const iconMap: Record<string, React.ElementType> = {
   Plane, Briefcase, ShoppingBag, Code, Wrench,
 };
 
+type FilterTab = "prebuilt" | "mine" | "public";
+
 export default function Dashboard() {
   const { user } = useAuth0();
   const navigate = useNavigate();
   useAuth0ProfileSync();
 
   const [customDemos, setCustomDemos] = useState<any[]>([]);
+  const [publicDemos, setPublicDemos] = useState<any[]>([]);
   const [magicOpen, setMagicOpen] = useState(false);
   const [editDemo, setEditDemo] = useState<any | null>(null);
   const [deleteDemo, setDeleteDemo] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState<FilterTab>("prebuilt");
 
   const loadCustomDemos = useCallback(async () => {
     if (!user?.sub) return;
@@ -42,7 +46,24 @@ export default function Dashboard() {
     if (data) setCustomDemos(data);
   }, [user?.sub]);
 
+  const loadPublicDemos = useCallback(async () => {
+    const { data } = await supabase
+      .from("demo_environments")
+      .select("*")
+      .eq("env_type", "custom")
+      .order("created_at", { ascending: false });
+    if (data) {
+      // Filter to only public ones (is_public === true or not set yet = treated as public by default)
+      setPublicDemos(data.filter((d: any) => {
+        const cfg = d.config_overrides as any;
+        return cfg?.wizard && (cfg?.isPublic !== false);
+      }));
+    }
+  }, []);
+
   useEffect(() => { loadCustomDemos(); }, [loadCustomDemos]);
+  useEffect(() => { loadPublicDemos(); }, [loadPublicDemos]);
+
 
   const handleAIGenerated = async (config: any) => {
     if (!user?.sub) return;
@@ -54,11 +75,13 @@ export default function Dashboard() {
         auth0_sub: user.sub,
         template_id: baseTemplateId,
         env_type: "custom",
-        config_overrides: config as any,
+        config_overrides: { ...config, isPublic: config.isPublic !== false } as any,
       });
       if (error) throw error;
       toast.success(`"${config.name}" demo created!`);
       await loadCustomDemos();
+      await loadPublicDemos();
+      setActiveTab("mine");
     } catch (e: any) {
       toast.error("Failed to save demo: " + (e.message || e.details || JSON.stringify(e)));
     }
@@ -73,6 +96,7 @@ export default function Dashboard() {
     toast.success("Demo updated!");
     setEditDemo(null);
     await loadCustomDemos();
+    await loadPublicDemos();
   };
 
   const handleDelete = async () => {
@@ -87,12 +111,19 @@ export default function Dashboard() {
       toast.success("Demo deleted.");
       setDeleteDemo(null);
       await loadCustomDemos();
+      await loadPublicDemos();
     } catch (e: any) {
       toast.error("Failed to delete: " + e.message);
     } finally {
       setDeleting(false);
     }
   };
+
+  const FILTER_TABS: { id: FilterTab; label: string }[] = [
+    { id: "prebuilt", label: "Pre-built Templates" },
+    { id: "mine", label: "Made by Me" },
+    { id: "public", label: "All Public Demos" },
+  ];
 
   return (
     <DashboardLayout>
@@ -135,7 +166,8 @@ export default function Dashboard() {
       </Dialog>
 
       <main className="relative z-10 mx-auto max-w-7xl px-6 py-12">
-        <div className="mb-10 flex items-end justify-between">
+        {/* Header */}
+        <div className="mb-8 flex items-end justify-between">
           <div>
             <div className="mb-3 flex items-center gap-2">
               <span className="rounded-md bg-foreground px-2 py-0.5 text-[10px] font-bold tracking-wide text-background">
@@ -172,148 +204,298 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Custom demos */}
-        {customDemos.length > 0 && (
-          <div className="mb-10">
-            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" /> Your Custom Demos
-            </h2>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
-              {customDemos.map((demo, i) => {
-                const cfg = demo.config_overrides as any;
-                if (!cfg?.wizard) return null;
-                return (
-                  <motion.div
-                    key={demo.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: i * 0.08 }}
-                    className="flex"
+        {/* Filter Tabs */}
+        <div className="mb-8 flex items-center gap-1 rounded-lg border border-border/50 bg-card/30 p-1 w-fit">
+          {FILTER_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+                activeTab === tab.id
+                  ? "bg-foreground text-background shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+              {tab.id === "mine" && customDemos.length > 0 && (
+                <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                  activeTab === "mine" ? "bg-background/20 text-background" : "bg-secondary text-muted-foreground"
+                }`}>
+                  {customDemos.filter((d: any) => d.config_overrides?.wizard).length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Pre-built Templates Tab */}
+        {activeTab === "prebuilt" && (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+            {DEMO_TEMPLATES.map((template, i) => {
+              const Icon = iconMap[template.icon] || Wrench;
+              return (
+                <motion.div
+                  key={template.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: i * 0.08 }}
+                  className="flex"
+                >
+                  <Card
+                    className="group flex flex-col w-full cursor-pointer border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
+                    onClick={() => navigate(`/demo/${template.id}`)}
                   >
-                    <Card className="group flex flex-col w-full border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10">
-                      <CardHeader>
-                        <div className="mb-3 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${cfg.color || "hsl(262 83% 58%)"}15` }}>
-                              {cfg.customerLogo ? (
-                                <img
-                                  src={cfg.customerLogo}
-                                  alt={cfg.customerName || cfg.name}
-                                  className="h-8 w-8 object-contain"
-                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                                />
-                              ) : (
-                                <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
-                              )}
-                            </div>
-                            {cfg.customerName && (
-                              <span className="text-xs text-muted-foreground font-medium">{cfg.customerName}</span>
-                            )}
-                          </div>
-                          {/* Edit / Delete */}
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setEditDemo(demo); }}
-                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
-                              title="Edit demo"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setDeleteDemo(demo); }}
-                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                              title="Delete demo"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                        <CardTitle
-                          className="text-lg cursor-pointer"
-                          onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
+                    <CardHeader>
+                      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: `${template.color}20` }}>
+                        <Icon className="h-6 w-6" style={{ color: template.color }} />
+                      </div>
+                      <CardTitle className="text-lg">{template.name}</CardTitle>
+                      <CardDescription>{template.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col flex-1">
+                      <div className="flex flex-wrap gap-2">
+                        {template.auth0Features.map((f) => (
+                          <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
+                        ))}
+                      </div>
+                      <div className="mt-auto pt-4 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full text-xs border-border/60"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/builder/${template.id}`); }}
                         >
-                          {cfg.name}
-                        </CardTitle>
-                        <CardDescription>{cfg.description}</CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex flex-col flex-1">
-                        <div className="flex flex-wrap gap-2">
-                          {(cfg.auth0Features || []).map((f: any) => (
-                            <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
-                          ))}
-                        </div>
-                        <div className="mt-auto pt-4">
-                          <Button
-                            size="sm"
-                            className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
-                            onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
-                          >
-                            Launch Demo
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                );
-              })}
-            </div>
+                          <Wrench className="mr-1 h-3 w-3" /> Configure
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/demo/${template.id}`); }}
+                        >
+                          Launch Demo
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </div>
         )}
 
-        {/* Pre-built templates */}
-        <h2 className="text-lg font-semibold text-foreground mb-4">Pre-Built Templates</h2>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
-          {DEMO_TEMPLATES.map((template, i) => {
-            const Icon = iconMap[template.icon] || Wrench;
-            return (
-              <motion.div
-                key={template.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: i * 0.08 }}
-                className="flex"
-              >
-                <Card
-                  className="group flex flex-col w-full cursor-pointer border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
-                  onClick={() => navigate(`/demo/${template.id}`)}
-                >
-                  <CardHeader>
-                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: `${template.color}20` }}>
-                      <Icon className="h-6 w-6" style={{ color: template.color }} />
-                    </div>
-                    <CardTitle className="text-lg">{template.name}</CardTitle>
-                    <CardDescription>{template.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col flex-1">
-                    <div className="flex flex-wrap gap-2">
-                      {template.auth0Features.map((f) => (
-                        <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
-                      ))}
-                    </div>
-                    <div className="mt-auto pt-4 flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-full text-xs border-border/60"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/builder/${template.id}`); }}
-                      >
-                        <Wrench className="mr-1 h-3 w-3" /> Configure
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/demo/${template.id}`); }}
-                      >
-                        Launch Demo
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
+        {/* Made by Me Tab */}
+        {activeTab === "mine" && (
+          <div>
+            {customDemos.filter((d: any) => d.config_overrides?.wizard).length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                  <Sparkles className="h-7 w-7 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">No custom demos yet</h3>
+                <p className="text-muted-foreground text-sm mb-6 max-w-sm">
+                  Create your first custom demo using the wizard or AI generator.
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setMagicOpen(true)} className="rounded-full">
+                    <Sparkles className="mr-1.5 h-4 w-4" /> AI Generate
+                  </Button>
+                  <Button onClick={() => navigate("/wizard")} className="rounded-full bg-foreground text-background hover:bg-foreground/90">
+                    <Plus className="mr-1.5 h-4 w-4" /> Create Demo
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+                {customDemos.map((demo, i) => {
+                  const cfg = demo.config_overrides as any;
+                  if (!cfg?.wizard) return null;
+                  return (
+                    <motion.div
+                      key={demo.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: i * 0.08 }}
+                      className="flex"
+                    >
+                      <Card className="group flex flex-col w-full border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10">
+                        <CardHeader>
+                          <div className="mb-3 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${cfg.color || "hsl(262 83% 58%)"}15` }}>
+                                {cfg.customerLogo ? (
+                                  <img
+                                    src={cfg.customerLogo}
+                                    alt={cfg.customerName || cfg.name}
+                                    className="h-8 w-8 object-contain"
+                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                  />
+                                ) : (
+                                  <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
+                                )}
+                              </div>
+                              {cfg.customerName && (
+                                <span className="text-xs text-muted-foreground font-medium">{cfg.customerName}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {/* Visibility badge */}
+                              <span className={`flex items-center gap-0.5 text-[9px] font-medium rounded-full px-1.5 py-0.5 ${
+                                cfg.isPublic !== false
+                                  ? "bg-accent/20 text-accent-foreground"
+                                  : "bg-secondary text-muted-foreground"
+                              }`}>
+                                {cfg.isPublic !== false ? <Globe className="h-2.5 w-2.5" /> : <Lock className="h-2.5 w-2.5" />}
+                                {cfg.isPublic !== false ? "Public" : "Private"}
+                              </span>
+                              {/* Edit / Delete — visible on hover */}
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setEditDemo(demo); }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
+                                  title="Edit demo"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setDeleteDemo(demo); }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                  title="Delete demo"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                          <CardTitle
+                            className="text-lg cursor-pointer"
+                            onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
+                          >
+                            {cfg.name}
+                          </CardTitle>
+                          <CardDescription>{cfg.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-col flex-1">
+                          <div className="flex flex-wrap gap-2">
+                            {(cfg.auth0Features || []).map((f: any) => (
+                              <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
+                            ))}
+                          </div>
+                          <div className="mt-auto pt-4">
+                            <Button
+                              size="sm"
+                              className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
+                              onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
+                            >
+                              Launch Demo
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* All Public Demos Tab */}
+        {activeTab === "public" && (
+          <div>
+            {publicDemos.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-secondary">
+                  <Globe className="h-7 w-7 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">No public demos yet</h3>
+                <p className="text-muted-foreground text-sm">Be the first to create a public custom demo.</p>
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+                {publicDemos.map((demo, i) => {
+                  const cfg = demo.config_overrides as any;
+                  const isOwner = demo.auth0_sub === user?.sub;
+                  return (
+                    <motion.div
+                      key={demo.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: i * 0.08 }}
+                      className="flex"
+                    >
+                      <Card className="group flex flex-col w-full border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10">
+                        <CardHeader>
+                          <div className="mb-3 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${cfg.color || "hsl(262 83% 58%)"}15` }}>
+                                {cfg.customerLogo ? (
+                                  <img
+                                    src={cfg.customerLogo}
+                                    alt={cfg.customerName || cfg.name}
+                                    className="h-8 w-8 object-contain"
+                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                  />
+                                ) : (
+                                  <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
+                                )}
+                              </div>
+                              {cfg.customerName && (
+                                <span className="text-xs text-muted-foreground font-medium">{cfg.customerName}</span>
+                              )}
+                            </div>
+                            {isOwner && (
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setEditDemo(demo); }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
+                                  title="Edit demo"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setDeleteDemo(demo); }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                  title="Delete demo"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <CardTitle
+                            className="text-lg cursor-pointer"
+                            onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
+                          >
+                            {cfg.name}
+                          </CardTitle>
+                          <CardDescription>{cfg.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-col flex-1">
+                          <div className="flex flex-wrap gap-2">
+                            {(cfg.auth0Features || []).map((f: any) => (
+                              <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
+                            ))}
+                          </div>
+                          <div className="mt-auto pt-4">
+                            <Button
+                              size="sm"
+                              className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
+                              onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
+                            >
+                              Launch Demo
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </DashboardLayout>
   );
 }
+
