@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import mermaid from "mermaid";
 import { cn } from "@/lib/utils";
 import { renderMermaid } from "@/lib/mermaid-queue";
 import { Badge } from "@/components/ui/badge";
@@ -14,45 +13,7 @@ import {
   Globe, Lock, Database, CheckCircle, GitBranch, X, Maximize2, PenLine,
 } from "lucide-react";
 
-// ─── Mermaid init ───
-mermaid.initialize({
-  startOnLoad: false,
-  theme: "dark",
-  themeVariables: {
-    background: "#0a0a0f",
-    primaryColor: "#6d28d9",
-    primaryTextColor: "#f5f5f5",
-    primaryBorderColor: "#4c1d95",
-    lineColor: "#7c3aed",
-    secondaryColor: "#1e1b2e",
-    tertiaryColor: "#14121f",
-    edgeLabelBackground: "#1e1b2e",
-    clusterBkg: "#1e1b2e",
-    titleColor: "#f5f5f5",
-    nodeBorder: "#4c1d95",
-    mainBkg: "#1e1b2e",
-    nodeTextColor: "#f5f5f5",
-    fontFamily: "Inter, system-ui, sans-serif",
-    fontSize: "13px",
-    actorBkg: "#1e1b2e",
-    actorBorder: "#6d28d9",
-    actorTextColor: "#f5f5f5",
-    actorLineColor: "#6d28d9",
-    signalColor: "#a78bfa",
-    signalTextColor: "#f5f5f5",
-    labelBoxBkgColor: "#1e1b2e",
-    labelBoxBorderColor: "#6d28d9",
-    labelTextColor: "#f5f5f5",
-    loopTextColor: "#a78bfa",
-    noteBorderColor: "#6d28d9",
-    noteBkgColor: "#14121f",
-    noteTextColor: "#d4c5ff",
-    activationBorderColor: "#6d28d9",
-    activationBkgColor: "#2d1b69",
-  },
-  flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
-  sequence: { mirrorActors: false, useMaxWidth: true },
-});
+// mermaid is initialised once inside mermaid-queue.ts — no duplicate init needed here
 
 // Shared SVG cache so whiteboard can reuse rendered SVGs
 export const renderedSvgCache: Record<string, string> = {};
