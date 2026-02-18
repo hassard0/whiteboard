@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { renderedSvgCache } from "@/pages/Concepts";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown, Minus, Plus, Wand2, Download, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -78,10 +79,15 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   // All diagrams = prop diagrams + custom ones
   const allDiagrams = [...diagrams, ...customDiagrams];
 
-  // Local SVG store — seed from pre-rendered cache passed in
-  const [svgStore, setSvgStore] = useState<Record<string, string>>(() =>
-    Object.fromEntries(diagrams.filter((d) => d.svg).map((d) => [d.id, d.svg]))
-  );
+  // Local SVG store — seed from pre-rendered cache passed in props, plus the global renderedSvgCache
+  const [svgStore, setSvgStore] = useState<Record<string, string>>(() => {
+    const store: Record<string, string> = {};
+    for (const d of diagrams) {
+      const cached = d.svg || renderedSvgCache[d.id] || "";
+      if (cached) store[d.id] = cached;
+    }
+    return store;
+  });
 
   const lastPos = useRef<{ x: number; y: number } | null>(null);
   const isPanning = useRef(false);
@@ -105,15 +111,39 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
 
   // ─── Pre-render ALL uncached diagrams on mount ───────────────────────────
   useEffect(() => {
-    diagrams.forEach((d) => {
+    function tryRender(d: DiagramOption) {
       if (!d.diagram) return;
-      if (svgStore[d.id]) return;
       if (renderingRef.current.has(d.id)) return;
       renderingRef.current.add(d.id);
       renderMermaid(d.diagram)
-        .then((svg) => setSvgStore((prev) => ({ ...prev, [d.id]: svg })))
-        .catch((err) => console.error(`[Whiteboard] pre-render failed "${d.name}":`, err))
-        .finally(() => renderingRef.current.delete(d.id));
+        .then((svg) => {
+          setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
+          renderingRef.current.delete(d.id);
+        })
+        .catch((err) => {
+          console.error(`[Whiteboard] render failed for "${d.name}":`, err);
+          renderingRef.current.delete(d.id);
+          // Retry once after a short delay
+          setTimeout(() => {
+            if (!svgStore[d.id]) {
+              renderingRef.current.add(d.id);
+              renderMermaid(d.diagram!)
+                .then((svg) => setSvgStore((prev) => ({ ...prev, [d.id]: svg })))
+                .catch((e) => console.error(`[Whiteboard] retry failed for "${d.name}":`, e))
+                .finally(() => renderingRef.current.delete(d.id));
+            }
+          }, 2500);
+        });
+    }
+    // Stagger slightly so we don't hammer the queue with all 11 diagrams at once.
+    // Skip any diagram already seeded into svgStore (from cache or props).
+    let delay = 0;
+    diagrams.forEach((d) => {
+      const alreadyCached = !!(d.svg || renderedSvgCache[d.id]);
+      if (!alreadyCached) {
+        setTimeout(() => tryRender(d), delay);
+        delay += 100;
+      }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -640,9 +670,9 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
                   position: "relative",
                 }}
               >
-                {/* Bottom: diagram + background */}
-                <canvas ref={diagramCanvasRef} className="absolute inset-0 w-full h-full" />
-                {/* Top: annotation layer */}
+                {/* Bottom: diagram + background — z-index 1 */}
+                <canvas ref={diagramCanvasRef} className="absolute inset-0 w-full h-full" style={{ zIndex: 1 }} />
+                {/* Top: annotation layer — z-index 2, always above diagram */}
                 <canvas
                   ref={annotationCanvasRef}
                   className={cn(
@@ -656,7 +686,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
                   onPointerLeave={onPointerUp}
-                  style={{ cursor: isPanning.current ? "grabbing" : undefined }}
+                  style={{ zIndex: 2, cursor: isPanning.current ? "grabbing" : undefined }}
                 />
               </div>
             </div>
@@ -667,7 +697,8 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
         <AnimatePresence>
           {showMagicModal && (
             <motion.div
-              className="absolute inset-0 z-60 flex items-center justify-center p-6"
+              className="absolute inset-0 flex items-center justify-center p-6"
+              style={{ zIndex: 60 }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
