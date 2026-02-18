@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Check, Plus, Trash2, Shield, UserCheck, Key, Lock, FileText, User, ArrowRightLeft } from "lucide-react";
+import { Check, Plus, Trash2, Shield, UserCheck, Key, Lock, FileText, User, ArrowRightLeft, GripVertical, Globe } from "lucide-react";
 import { TOOL_LIBRARY, AUTH0_FEATURE_LIBRARY, INDUSTRY_GROUPS, type ToolDef, type Auth0FeatureDef } from "@/lib/tool-library";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +37,13 @@ const HSL_PRESETS = [
   "hsl(330 70% 55%)",
 ];
 
+interface AutopilotStep {
+  label: string;
+  message: string;
+  explanation: string;
+  feature: string;
+}
+
 export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProps) {
   const cfg = demo?.config_overrides as any;
 
@@ -44,6 +51,7 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [customerLogo, setCustomerLogo] = useState("");
   const [color, setColor] = useState("hsl(262 83% 58%)");
   const [knowledgePack, setKnowledgePack] = useState("");
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(new Set());
@@ -51,6 +59,7 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
   const [selectedFeatureIds, setSelectedFeatureIds] = useState<Set<string>>(new Set());
   const [featureDescOverrides, setFeatureDescOverrides] = useState<Record<string, string>>({});
   const [systemPromptParts, setSystemPromptParts] = useState<string[]>([""]);
+  const [autopilotSteps, setAutopilotSteps] = useState<AutopilotStep[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Sync state when demo changes
@@ -59,11 +68,12 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
     setName(cfg.name || "");
     setDescription(cfg.description || "");
     setCustomerName(cfg.customerName || "");
+    setCustomerLogo(cfg.customerLogo || "");
     setColor(cfg.color || "hsl(262 83% 58%)");
     setKnowledgePack(cfg.knowledgePack || "");
     setSystemPromptParts(cfg.systemPromptParts?.length ? cfg.systemPromptParts : [""]);
+    setAutopilotSteps(cfg.autopilotSteps?.length ? cfg.autopilotSteps : []);
 
-    // Build selected tools
     const toolIds = new Set<string>((cfg.tools || []).map((t: any) => t.id));
     setSelectedToolIds(toolIds);
     const overrides: Record<string, { requiresApproval: boolean; description: string }> = {};
@@ -72,7 +82,6 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
     }
     setToolOverrides(overrides);
 
-    // Build selected features
     const featureIds = new Set<string>((cfg.auth0Features || []).map((f: any) => f.id));
     setSelectedFeatureIds(featureIds);
     const fOverrides: Record<string, string> = {};
@@ -89,12 +98,9 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
         next.delete(toolId);
       } else {
         next.add(toolId);
-        // Initialize override from library if not present
         if (!toolOverrides[toolId]) {
           const lib = TOOL_LIBRARY.find((t) => t.id === toolId);
-          if (lib) {
-            setToolOverrides((o) => ({ ...o, [toolId]: { requiresApproval: lib.requiresApproval, description: lib.description } }));
-          }
+          if (lib) setToolOverrides((o) => ({ ...o, [toolId]: { requiresApproval: lib.requiresApproval, description: lib.description } }));
         }
       }
       return next;
@@ -117,33 +123,27 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
     });
   };
 
-  const updatePromptPart = (i: number, val: string) => {
-    setSystemPromptParts((prev) => prev.map((p, idx) => (idx === i ? val : p)));
-  };
+  const updatePromptPart = (i: number, val: string) => setSystemPromptParts((prev) => prev.map((p, idx) => idx === i ? val : p));
   const addPromptPart = () => setSystemPromptParts((p) => [...p, ""]);
   const removePromptPart = (i: number) => setSystemPromptParts((p) => p.filter((_, idx) => idx !== i));
+
+  const addAutopilotStep = () => setAutopilotSteps((s) => [...s, { label: `Step ${s.length + 1}`, message: "", explanation: "", feature: "" }]);
+  const updateAutopilotStep = (i: number, field: keyof AutopilotStep, val: string) =>
+    setAutopilotSteps((prev) => prev.map((s, idx) => idx === i ? { ...s, [field]: val } : s));
+  const removeAutopilotStep = (i: number) => setAutopilotSteps((s) => s.filter((_, idx) => idx !== i));
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Build tools array from selections
       const tools = Array.from(selectedToolIds).map((id) => {
         const lib = TOOL_LIBRARY.find((t) => t.id === id)!;
         const override = toolOverrides[id];
-        return {
-          ...lib,
-          requiresApproval: override?.requiresApproval ?? lib.requiresApproval,
-          description: override?.description || lib.description,
-        };
+        return { ...lib, requiresApproval: override?.requiresApproval ?? lib.requiresApproval, description: override?.description || lib.description };
       });
 
-      // Build auth0Features array
       const auth0Features = Array.from(selectedFeatureIds).map((id) => {
         const lib = AUTH0_FEATURE_LIBRARY.find((f) => f.id === id)!;
-        return {
-          ...lib,
-          description: featureDescOverrides[id] || lib.description,
-        };
+        return { ...lib, description: featureDescOverrides[id] || lib.description };
       });
 
       const newConfig = {
@@ -151,11 +151,14 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
         name,
         description,
         customerName: customerName || undefined,
+        customerLogo: customerLogo || undefined,
         color,
         knowledgePack,
         systemPromptParts: systemPromptParts.filter((p) => p.trim()),
         tools,
         auth0Features,
+        autopilotSteps,
+        wizard: true,
       };
 
       await onSave(demo.id, newConfig);
@@ -164,7 +167,6 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
     }
   };
 
-  // Group tools by industry for rendering
   const toolsByIndustry = TOOL_LIBRARY.reduce<Record<string, ToolDef[]>>((acc, tool) => {
     if (!acc[tool.industry]) acc[tool.industry] = [];
     acc[tool.industry].push(tool);
@@ -173,13 +175,13 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-2xl border-border/60 bg-card/95 backdrop-blur-xl max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="sm:max-w-2xl border-border/60 bg-card/95 backdrop-blur-xl max-h-[92vh] flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-3 border-b border-border/40">
           <DialogTitle className="text-lg font-semibold">Edit Demo</DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="flex flex-col flex-1 min-h-0">
-          <TabsList className="mx-6 mt-3 mb-0 grid grid-cols-4 h-9">
+          <TabsList className="mx-6 mt-3 mb-0 grid grid-cols-5 h-9">
             <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
             <TabsTrigger value="tools" className="text-xs">
               Tools <Badge variant="secondary" className="ml-1 text-[10px] px-1 h-4">{selectedToolIds.size}</Badge>
@@ -188,6 +190,9 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
               Auth0 <Badge variant="secondary" className="ml-1 text-[10px] px-1 h-4">{selectedFeatureIds.size}</Badge>
             </TabsTrigger>
             <TabsTrigger value="prompt" className="text-xs">Prompt</TabsTrigger>
+            <TabsTrigger value="autopilot" className="text-xs">
+              Autopilot <Badge variant="secondary" className="ml-1 text-[10px] px-1 h-4">{autopilotSteps.length}</Badge>
+            </TabsTrigger>
           </TabsList>
 
           <ScrollArea className="flex-1 min-h-0">
@@ -207,16 +212,23 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
                   <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="bg-secondary/50" placeholder="e.g. IKEA" />
                 </div>
                 <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5"><Globe className="h-3.5 w-3.5" /> Logo URL</Label>
+                  <Input value={customerLogo} onChange={(e) => setCustomerLogo(e.target.value)} className="bg-secondary/50 text-xs" placeholder="https://logo.clearbit.com/ikea.com" />
+                  {customerLogo && (
+                    <div className="mt-1 flex items-center gap-2">
+                      <img src={customerLogo} alt="logo preview" className="h-8 w-8 object-contain rounded border border-border/40" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                      <span className="text-xs text-muted-foreground">Preview</span>
+                    </div>
+                  )}
+                </div>
+                <div className="col-span-2 space-y-1.5">
                   <Label>Brand Color</Label>
                   <div className="flex flex-wrap gap-2">
                     {HSL_PRESETS.map((c) => (
                       <button
                         key={c}
                         onClick={() => setColor(c)}
-                        className={cn(
-                          "h-6 w-6 rounded-full border-2 transition-all",
-                          color === c ? "border-foreground scale-110" : "border-transparent"
-                        )}
+                        className={cn("h-6 w-6 rounded-full border-2 transition-all", color === c ? "border-foreground scale-110" : "border-transparent")}
                         style={{ backgroundColor: c }}
                         title={c}
                       />
@@ -225,7 +237,7 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
                   <Input value={color} onChange={(e) => setColor(e.target.value)} className="bg-secondary/50 text-xs font-mono mt-1" placeholder="hsl(262 83% 58%)" />
                 </div>
                 <div className="col-span-2 space-y-1.5">
-                  <Label>Knowledge Pack <span className="text-xs text-muted-foreground font-normal">(shown in demo explainer)</span></Label>
+                  <Label>Knowledge Pack <span className="text-xs text-muted-foreground font-normal">(Auth0 talking points shown in demo)</span></Label>
                   <Textarea value={knowledgePack} onChange={(e) => setKnowledgePack(e.target.value)} className="bg-secondary/50 resize-none min-h-[80px]" placeholder="Explain which Auth0 features are used and why they matter for this use case." />
                 </div>
               </div>
@@ -236,7 +248,7 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
               <p className="text-xs text-muted-foreground">Select which tools this agent can use. Toggle approval requirement per tool.</p>
               {Object.entries(toolsByIndustry).map(([industry, tools]) => (
                 <div key={industry}>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">{INDUSTRY_GROUPS[industry] || industry}</p>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">{INDUSTRY_GROUPS[industry] || industry}</p>
                   <div className="space-y-1.5">
                     {tools.map((tool) => {
                       const isSelected = selectedToolIds.has(tool.id);
@@ -244,20 +256,11 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
                       const requiresApproval = override?.requiresApproval ?? tool.requiresApproval;
                       const desc = override?.description ?? tool.description;
                       return (
-                        <div
-                          key={tool.id}
-                          className={cn(
-                            "rounded-lg border p-3 transition-all",
-                            isSelected ? "border-primary/40 bg-primary/5" : "border-border/40 bg-secondary/20"
-                          )}
-                        >
+                        <div key={tool.id} className={cn("rounded-lg border p-3 transition-all", isSelected ? "border-primary/40 bg-primary/5" : "border-border/40 bg-secondary/20")}>
                           <div className="flex items-start gap-3">
                             <button
                               onClick={() => toggleTool(tool.id)}
-                              className={cn(
-                                "mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition-all",
-                                isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border/60 bg-transparent"
-                              )}
+                              className={cn("mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition-all", isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border/60 bg-transparent")}
                             >
                               {isSelected && <Check className="h-3 w-3" />}
                             </button>
@@ -269,9 +272,7 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
                                     <span className="text-[10px] text-muted-foreground">Needs approval</span>
                                     <Switch
                                       checked={requiresApproval}
-                                      onCheckedChange={(v) =>
-                                        setToolOverrides((o) => ({ ...o, [tool.id]: { ...o[tool.id], requiresApproval: v, description: desc } }))
-                                      }
+                                      onCheckedChange={(v) => setToolOverrides((o) => ({ ...o, [tool.id]: { ...o[tool.id], requiresApproval: v, description: desc } }))}
                                       className="h-4 w-7 data-[state=checked]:bg-primary"
                                     />
                                   </div>
@@ -280,9 +281,7 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
                               {isSelected ? (
                                 <Input
                                   value={desc}
-                                  onChange={(e) =>
-                                    setToolOverrides((o) => ({ ...o, [tool.id]: { requiresApproval, description: e.target.value } }))
-                                  }
+                                  onChange={(e) => setToolOverrides((o) => ({ ...o, [tool.id]: { requiresApproval, description: e.target.value } }))}
                                   className="mt-1.5 h-7 text-xs bg-secondary/60 border-border/40"
                                 />
                               ) : (
@@ -314,20 +313,11 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
                 const desc = featureDescOverrides[feature.id] ?? feature.description;
                 const Icon = FEATURE_ICON_MAP[feature.icon] || Shield;
                 return (
-                  <div
-                    key={feature.id}
-                    className={cn(
-                      "rounded-lg border p-3 transition-all",
-                      isSelected ? "border-primary/40 bg-primary/5" : "border-border/40 bg-secondary/20"
-                    )}
-                  >
+                  <div key={feature.id} className={cn("rounded-lg border p-3 transition-all", isSelected ? "border-primary/40 bg-primary/5" : "border-border/40 bg-secondary/20")}>
                     <div className="flex items-start gap-3">
                       <button
                         onClick={() => toggleFeature(feature.id)}
-                        className={cn(
-                          "mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition-all",
-                          isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border/60 bg-transparent"
-                        )}
+                        className={cn("mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition-all", isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border/60 bg-transparent")}
                       >
                         {isSelected && <Check className="h-3 w-3" />}
                       </button>
@@ -354,64 +344,104 @@ export function EditDemoModal({ open, demo, onClose, onSave }: EditDemoModalProp
 
             {/* PROMPT TAB */}
             <TabsContent value="prompt" className="px-6 py-4 mt-0 space-y-3">
-              <p className="text-xs text-muted-foreground">Each line is a separate instruction in the system prompt. Order matters — first line sets the agent's role.</p>
+              <p className="text-xs text-muted-foreground">Each line is a separate instruction in the system prompt. First line sets the agent's role — be specific to the company and user type.</p>
               <AnimatePresence>
                 {systemPromptParts.map((part, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    className="flex gap-2 items-start"
-                  >
+                  <motion.div key={i} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="flex gap-2 items-start">
                     <span className="mt-2.5 text-xs text-muted-foreground w-4 flex-shrink-0 text-right">{i + 1}.</span>
                     <Textarea
                       value={part}
                       onChange={(e) => updatePromptPart(i, e.target.value)}
                       className="flex-1 bg-secondary/50 resize-none min-h-[64px] text-sm"
-                      placeholder={
-                        i === 0
-                          ? "You are [Role] for [Company]. [Core mission]."
-                          : i === 1
-                          ? "Rule about what the agent can do without approval."
-                          : "Rule about what requires human approval."
-                      }
+                      placeholder={i === 0 ? "You are [Role] for [Company]. [Core mission...]" : i === 1 ? "You can access [data types] without approval..." : "Always require approval before [sensitive action]..."}
                     />
                     {systemPromptParts.length > 1 && (
-                      <button
-                        onClick={() => removePromptPart(i)}
-                        className="mt-2.5 text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
+                      <button onClick={() => removePromptPart(i)} className="mt-2.5 text-muted-foreground hover:text-destructive transition-colors">
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
                   </motion.div>
                 ))}
               </AnimatePresence>
-              <Button variant="outline" size="sm" onClick={addPromptPart} className="rounded-full gap-1.5 text-xs border-dashed">
-                <Plus className="h-3 w-3" /> Add Instruction
+              <Button variant="outline" size="sm" onClick={addPromptPart} className="w-full h-8 text-xs">
+                <Plus className="mr-1.5 h-3 w-3" /> Add Instruction
+              </Button>
+            </TabsContent>
+
+            {/* AUTOPILOT TAB */}
+            <TabsContent value="autopilot" className="px-6 py-4 mt-0 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Build a step-by-step guided demo. Each step auto-sends a message to the agent and shows an Auth0 explanation to the viewer.
+                <span className="text-primary"> Optional — demos work without autopilot steps.</span>
+              </p>
+              <AnimatePresence>
+                {autopilotSteps.map((astep, i) => (
+                  <motion.div key={i} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="rounded-lg border border-border/60 p-4 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <GripVertical className="h-4 w-4 text-muted-foreground/40" />
+                        <Badge variant="secondary" className="text-[10px]">Step {i + 1}</Badge>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeAutopilotStep(i)}>
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Step Label</Label>
+                      <Input
+                        value={astep.label}
+                        onChange={(e) => updateAutopilotStep(i, "label", e.target.value)}
+                        placeholder="e.g. 'View Portfolio'"
+                        className="h-8 text-sm bg-secondary/50"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Message to Send</Label>
+                      <Input
+                        value={astep.message}
+                        onChange={(e) => updateAutopilotStep(i, "message", e.target.value)}
+                        placeholder="e.g. 'Show me my current portfolio holdings'"
+                        className="h-8 text-sm bg-secondary/50"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Auth0 Explanation (shown to viewer)</Label>
+                      <Textarea
+                        value={astep.explanation}
+                        onChange={(e) => updateAutopilotStep(i, "explanation", e.target.value)}
+                        placeholder="What Auth0 is doing behind the scenes at this step..."
+                        className="text-xs bg-secondary/50 resize-none min-h-[60px]"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Auth0 Feature Highlighted</Label>
+                      <Input
+                        value={astep.feature}
+                        onChange={(e) => updateAutopilotStep(i, "feature", e.target.value)}
+                        placeholder="e.g. 'Token Vault' or 'Fine-Grained Authorization'"
+                        className="h-8 text-xs bg-secondary/50"
+                      />
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              <Button variant="outline" onClick={addAutopilotStep} className="w-full h-8 text-xs">
+                <Plus className="mr-1.5 h-3 w-3" /> Add Autopilot Step
               </Button>
             </TabsContent>
           </ScrollArea>
-        </Tabs>
 
-        <div className="flex items-center justify-between px-6 py-4 border-t border-border/40">
-          <div className="flex items-center gap-2">
-            <div className="h-4 w-4 rounded-full border-2 border-foreground/20" style={{ backgroundColor: color }} />
-            <span className="text-xs text-muted-foreground">{selectedToolIds.size} tools · {selectedFeatureIds.size} features</span>
+          {/* Footer */}
+          <div className="border-t border-border/40 px-6 py-4 flex items-center justify-between flex-shrink-0">
+            <p className="text-xs text-muted-foreground">{selectedToolIds.size} tools · {selectedFeatureIds.size} Auth0 features · {autopilotSteps.length} autopilot steps</p>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+              <Button size="sm" onClick={handleSave} disabled={saving} className="gradient-auth0 text-primary-foreground rounded-full px-5">
+                {saving ? "Saving…" : "Save Changes"}
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={onClose} className="rounded-full">Cancel</Button>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving || !name.trim() || selectedToolIds.size === 0}
-              className="rounded-full bg-foreground text-background hover:bg-foreground/90 px-5"
-            >
-              {saving ? "Saving…" : "Save Changes"}
-            </Button>
-          </div>
-        </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

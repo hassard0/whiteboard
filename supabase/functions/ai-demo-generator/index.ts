@@ -41,13 +41,13 @@ const TOOL_LIBRARY = [
   { id: "request_esign", name: "Request E-Signature", description: "Send a document for counter-party e-signature", scopes: ["esign:send"], requiresApproval: true, industry: "legal", mockDelay: 2000 },
   { id: "audit_trail", name: "View Audit Trail", description: "Access the compliance and action audit log", scopes: ["audit:read"], requiresApproval: false, industry: "legal", mockDelay: 800 },
   { id: "file_document", name: "File Document", description: "File a legal document with a court or registry", scopes: ["filing:write", "legal:admin"], requiresApproval: true, industry: "legal", mockDelay: 3000 },
-  // DevOps / Engineering
+  // DevOps
   { id: "list_repos", name: "List Repositories", description: "List code repositories the user has access to", scopes: ["repos:read"], requiresApproval: false, industry: "devops", mockDelay: 800 },
   { id: "trigger_deploy", name: "Trigger Deployment", description: "Trigger a CI/CD pipeline deployment", scopes: ["deploy:execute"], requiresApproval: true, industry: "devops", mockDelay: 2000 },
   { id: "check_monitoring", name: "Check System Health", description: "View infrastructure health metrics and alerts", scopes: ["monitoring:read"], requiresApproval: false, industry: "devops", mockDelay: 600 },
   { id: "create_incident", name: "Create Incident", description: "Open a P1/P2 incident and notify on-call team", scopes: ["incidents:write"], requiresApproval: true, industry: "devops", mockDelay: 1000 },
   { id: "rollback_deploy", name: "Rollback Deployment", description: "Roll back to a previous stable deployment", scopes: ["deploy:rollback"], requiresApproval: true, industry: "devops", mockDelay: 2500 },
-  // Retail / E-commerce
+  // Retail
   { id: "search_inventory", name: "Search Inventory", description: "Search product catalog and stock availability", scopes: ["inventory:read"], requiresApproval: false, industry: "retail", mockDelay: 800 },
   { id: "process_order", name: "Process Order", description: "Process a customer purchase order with payment", scopes: ["orders:write", "payments:charge"], requiresApproval: true, industry: "retail", mockDelay: 2000 },
   { id: "handle_return", name: "Handle Return", description: "Process a product return and issue a refund", scopes: ["returns:write", "refunds:process"], requiresApproval: true, industry: "retail", mockDelay: 1500 },
@@ -62,13 +62,13 @@ const TOOL_LIBRARY = [
   { id: "search_listings", name: "Search Listings", description: "Search property listings by location, price, and criteria", scopes: ["listings:read"], requiresApproval: false, industry: "realestate", mockDelay: 1200 },
   { id: "schedule_showing", name: "Schedule Showing", description: "Book a property viewing appointment", scopes: ["calendar:write", "listings:read"], requiresApproval: true, industry: "realestate", mockDelay: 1500 },
   { id: "submit_offer", name: "Submit Offer", description: "Submit a purchase offer on a property", scopes: ["offers:write", "legal:sign"], requiresApproval: true, industry: "realestate", mockDelay: 3000 },
-  // Communication / Productivity
+  // Communication
   { id: "read_calendar", name: "Read Calendar", description: "Read the user's calendar events and availability", scopes: ["calendar:read"], requiresApproval: false, industry: "communication", mockDelay: 1000 },
   { id: "schedule_meeting", name: "Schedule Meeting", description: "Create a calendar event with attendees", scopes: ["calendar:write"], requiresApproval: true, industry: "communication", mockDelay: 1500 },
   { id: "draft_email", name: "Draft Email", description: "Compose an email draft for user review before sending", scopes: ["email:draft"], requiresApproval: false, industry: "communication", mockDelay: 1200 },
   { id: "send_email", name: "Send Email", description: "Send an email on the user's behalf", scopes: ["email:send"], requiresApproval: true, industry: "communication", mockDelay: 1800 },
   { id: "search_contacts", name: "Search Contacts", description: "Search the user's contact directory", scopes: ["contacts:read"], requiresApproval: false, industry: "communication", mockDelay: 800 },
-  // Generic fallbacks
+  // Generic
   { id: "read_data", name: "Read Data", description: "Read records from a data source", scopes: ["data:read"], requiresApproval: false, industry: "custom", mockDelay: 800 },
   { id: "write_data", name: "Write Data", description: "Write or update records in a data source", scopes: ["data:write"], requiresApproval: true, industry: "custom", mockDelay: 1200 },
   { id: "execute_action", name: "Execute Action", description: "Execute a sensitive business action", scopes: ["actions:execute"], requiresApproval: true, industry: "custom", mockDelay: 1500 },
@@ -88,105 +88,133 @@ const AUTH0_FEATURE_LIBRARY = [
   { id: "step-up-auth", name: "Step-Up Authentication", description: "High-risk operations require re-authentication or MFA before proceeding.", icon: "Shield" },
 ];
 
-async function scrapeWebsiteForContext(url: string): Promise<{ 
-  logoUrl?: string; 
-  companyName?: string; 
+async function scrapeWithFirecrawl(url: string): Promise<{
+  logoUrl?: string;
+  companyName?: string;
   pageContext?: string;
 }> {
+  const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+  if (!FIRECRAWL_API_KEY) {
+    console.warn("FIRECRAWL_API_KEY not set, falling back to raw fetch");
+    return fallbackScrape(url);
+  }
+
   try {
     let normalized = url.trim();
     if (!normalized.startsWith("http")) normalized = "https://" + normalized;
 
-    const resp = await fetch(normalized, {
-      headers: { 
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
+    console.log("Scraping with Firecrawl:", normalized);
+
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${FIRECRAWL_API_KEY}`,
+        "Content-Type": "application/json",
       },
-      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({
+        url: normalized,
+        formats: ["markdown", "html", "branding"],
+        onlyMainContent: false,
+        waitFor: 3000,
+      }),
     });
 
-    if (!resp.ok) return {};
-
-    const html = await resp.text();
-    const origin = new URL(normalized).origin;
-    const domain = new URL(normalized).hostname.replace("www.", "");
-
-    // --- Extract company name (clean, not raw title) ---
-    const ogSiteNameMatch = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i)
-      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i);
-    
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const rawTitle = titleMatch?.[1]?.trim() || "";
-    // Clean title: take first segment before | - — and strip common suffixes
-    const cleanedTitle = rawTitle
-      .split(/[|\-–—]/)[0]
-      .trim()
-      .replace(/\s*(Home|Official Site|Website|\.com|Corp|Inc|LLC|Ltd)$/i, "")
-      .trim();
-
-    const companyName = ogSiteNameMatch?.[1]?.trim() || cleanedTitle.substring(0, 50) || undefined;
-
-    // --- Extract logo (prioritize high-quality icons) ---
-    let logoUrl: string | undefined;
-
-    // 1. apple-touch-icon (best quality square icon)
-    const appleTouchMatch = html.match(/<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["']/i)
-      || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["']/i);
-    
-    // 2. SVG favicon
-    const svgFaviconMatch = html.match(/<link[^>]+href=["']([^"']+\.svg)[^"']*["'][^>]+rel=["'][^"']*icon[^"']*["']/i)
-      || html.match(/<link[^>]+rel=["'][^"']*icon[^"']*["'][^>]+href=["']([^"']+\.svg)[^"']*["']/i);
-    
-    // 3. High-res PNG favicon
-    const pngFaviconMatch = html.match(/<link[^>]+sizes=["'](?:192x192|180x180|128x128|96x96|64x64|48x48)[^"']*["'][^>]+href=["']([^"']+)["']/i)
-      || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+sizes=["'](?:192x192|180x180|128x128|96x96|64x64|48x48)[^"']*["']/i);
-    
-    // 4. Clearbit as reliable fallback
-    const clearbitUrl = `https://logo.clearbit.com/${domain}`;
-
-    if (appleTouchMatch?.[1]) {
-      const href = appleTouchMatch[1];
-      logoUrl = href.startsWith("http") ? href : `${origin}${href.startsWith("/") ? "" : "/"}${href}`;
-    } else if (svgFaviconMatch?.[1]) {
-      const href = svgFaviconMatch[1];
-      logoUrl = href.startsWith("http") ? href : `${origin}${href.startsWith("/") ? "" : "/"}${href}`;
-    } else if (pngFaviconMatch?.[1]) {
-      const href = pngFaviconMatch[1];
-      logoUrl = href.startsWith("http") ? href : `${origin}${href.startsWith("/") ? "" : "/"}${href}`;
-    } else {
-      logoUrl = clearbitUrl;
+    if (!response.ok) {
+      const errText = await response.text();
+      console.warn("Firecrawl scrape failed:", response.status, errText);
+      return fallbackScrape(url);
     }
 
-    // --- Extract page context for AI ---
-    // Pull meta description, og:description, and visible text snippets
-    const metaDescMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{10,300})["']/i)
-      || html.match(/<meta[^>]+content=["']([^"']{10,300})["'][^>]+name=["']description["']/i);
-    const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']{10,300})["']/i)
-      || html.match(/<meta[^>]+content=["']([^"']{10,300})["'][^>]+property=["']og:description["']/i);
+    const result = await response.json();
+    const data = result.data || result;
 
-    // Extract some visible heading text (h1, h2)
-    const headings: string[] = [];
-    const h1Matches = html.matchAll(/<h1[^>]*>([^<]{5,100})<\/h1>/gi);
-    for (const m of h1Matches) headings.push(m[1].trim());
-    const h2Matches = html.matchAll(/<h2[^>]*>([^<]{5,100})<\/h2>/gi);
-    let h2Count = 0;
-    for (const m of h2Matches) { if (h2Count < 4) { headings.push(m[1].trim()); h2Count++; } }
+    // Extract logo from branding first, then metadata
+    let logoUrl: string | undefined;
+    const branding = data.branding;
+    if (branding?.images?.logo) {
+      logoUrl = branding.images.logo;
+    } else if (branding?.logo) {
+      logoUrl = branding.logo;
+    } else if (data.metadata?.ogImage) {
+      logoUrl = data.metadata.ogImage;
+    }
 
-    const pageContext = [
-      metaDescMatch?.[1] || ogDescMatch?.[1] || "",
-      headings.slice(0, 5).join(" | "),
-    ].filter(Boolean).join("\n").substring(0, 600);
+    // Fallback to Clearbit if no logo found
+    if (!logoUrl) {
+      const domain = new URL(normalized).hostname.replace("www.", "");
+      logoUrl = `https://logo.clearbit.com/${domain}`;
+    }
+
+    // Extract company name from branding/metadata
+    const companyName = data.metadata?.["og:site_name"]
+      || data.metadata?.siteName
+      || cleanTitle(data.metadata?.title || "");
+
+    // Build rich page context from markdown content (first 1500 chars is plenty)
+    const markdownContent = data.markdown || "";
+    const metaDesc = data.metadata?.description || data.metadata?.ogDescription || "";
+    const pageContext = [metaDesc, markdownContent.substring(0, 1200)].filter(Boolean).join("\n\n").substring(0, 2000);
+
+    console.log("Firecrawl result - company:", companyName, "logo:", logoUrl);
 
     return { logoUrl, companyName, pageContext };
   } catch (e) {
-    console.warn("Website scrape error:", e);
+    console.warn("Firecrawl error:", e);
+    return fallbackScrape(url);
+  }
+}
+
+function cleanTitle(rawTitle: string): string {
+  return rawTitle
+    .split(/[|\-–—]/)[0]
+    .trim()
+    .replace(/\s*(Home|Official Site|Website|\.com|Corp|Inc|LLC|Ltd)$/i, "")
+    .trim()
+    .substring(0, 50);
+}
+
+async function fallbackScrape(url: string): Promise<{ logoUrl?: string; companyName?: string; pageContext?: string }> {
+  try {
+    let normalized = url.trim();
+    if (!normalized.startsWith("http")) normalized = "https://" + normalized;
+    const domain = new URL(normalized).hostname.replace("www.", "");
+    const resp = await fetch(normalized, {
+      headers: { "User-Agent": "Mozilla/5.0", "Accept": "text/html" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return { logoUrl: `https://logo.clearbit.com/${domain}` };
+    const html = await resp.text();
+    const origin = new URL(normalized).origin;
+
+    // Company name
+    const ogSiteNameMatch = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i);
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const companyName = ogSiteNameMatch?.[1]?.trim() || cleanTitle(titleMatch?.[1]?.trim() || "");
+
+    // Logo
+    let logoUrl: string | undefined;
+    const appleTouchMatch = html.match(/<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["']/i);
+    if (appleTouchMatch?.[1]) {
+      const href = appleTouchMatch[1];
+      logoUrl = href.startsWith("http") ? href : `${origin}${href.startsWith("/") ? "" : "/"}${href}`;
+    } else {
+      logoUrl = `https://logo.clearbit.com/${domain}`;
+    }
+
+    // Context
+    const metaDescMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{10,300})["']/i);
+    const headings: string[] = [];
+    for (const m of html.matchAll(/<h[12][^>]*>([^<]{5,100})<\/h[12]>/gi)) headings.push(m[1].trim());
+    const pageContext = [metaDescMatch?.[1] || "", headings.slice(0, 5).join(" | ")].filter(Boolean).join("\n").substring(0, 800);
+
+    return { logoUrl, companyName, pageContext };
+  } catch (e) {
+    console.warn("Fallback scrape error:", e);
     try {
       const domain = new URL(url.startsWith("http") ? url : "https://" + url).hostname.replace("www.", "");
       return { logoUrl: `https://logo.clearbit.com/${domain}` };
-    } catch {
-      return {};
-    }
+    } catch { return {}; }
   }
 }
 
@@ -198,7 +226,7 @@ serve(async (req) => {
     const { action } = body;
 
     if (action === "fetch_logo") {
-      const result = await scrapeWebsiteForContext(body.url);
+      const result = await scrapeWithFirecrawl(body.url);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -209,42 +237,70 @@ serve(async (req) => {
       const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
       if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-      const systemPrompt = `You are a senior Auth0 solutions engineer building realistic, customer-specific AI agent demos for enterprise sales.
+      const systemPrompt = `You are a senior Auth0 solutions engineer building realistic, customer-specific AI agent demos for enterprise sales presentations.
 
-Your goal is to create a highly tailored demo configuration that feels like it was built FOR THIS SPECIFIC COMPANY, not a generic template.
+Your goal: create a config so specific to this company that a viewer watching the demo would INSTANTLY recognize it as built for them — not a generic template.
 
-AVAILABLE TOOLS (select 4-6 most realistic for the use case - only pick tools that make real-world sense together):
+AVAILABLE TOOLS (only pick 4-6 that form one coherent workflow — NEVER mix unrelated industries):
 ${JSON.stringify(TOOL_LIBRARY.map(t => ({ id: t.id, name: t.name, description: t.description, scopes: t.scopes, requiresApproval: t.requiresApproval, mockDelay: t.mockDelay })), null, 2)}
 
-AVAILABLE AUTH0 FEATURES (select 2-4 that directly address this company's real security/compliance concerns):
+AVAILABLE AUTH0 FEATURES (pick 2-4 that directly address this company's compliance/security pain points):
 ${JSON.stringify(AUTH0_FEATURE_LIBRARY.map(f => ({ id: f.id, name: f.name, description: f.description, icon: f.icon })), null, 2)}
 
 STRICT RULES:
-1. ONLY select tools that logically belong together in ONE coherent agent workflow. Do NOT mix unrelated industries (e.g., never put "get_itinerary" in a retail shopping demo).
-2. Tool descriptions must be customized for this specific company — replace generic text with company-specific context.
-3. Auth0 feature descriptions must reference this company's actual compliance/regulatory context (e.g., HIPAA for healthcare, PCI-DSS for payments, SOC2 for SaaS).
-4. The systemPromptParts must read like a real system prompt — authoritative, specific to the company's domain and user roles.
-5. The color should reflect the company's actual brand palette when known.
-6. customerName must be the clean company name only (e.g. "IKEA" not "Hej! Welcome to IKEA Global").
+1. Tools MUST all logically belong to ONE workflow. e.g., a wealth management demo uses portfolio + trade tools, NOT travel or HR tools.
+2. Rewrite EVERY tool description in this company's voice and context — no generic placeholder text.
+3. Auth0 feature descriptions must reference the company's actual regulatory context (HIPAA, PCI-DSS, SOC2, GDPR, etc.).
+4. systemPromptParts must read like a real production system prompt — not a template. Name the company, the specific user role, and concrete behavioral rules.
+5. autopilotSteps must be a realistic guided demo script: each step sends a natural user message that triggers the agent to use one of the selected tools, and the explanation shows what Auth0 feature is protecting that action.
+6. customerName must be the clean short brand name only (e.g. "Salesforce" not "Salesforce Inc. | CRM Software").
+7. Brand color must reflect the company's actual visual identity when known.
 
-Return ONLY valid JSON with this exact structure (no markdown, no explanation):
+Return ONLY valid JSON, no markdown fences, no explanation:
 {
-  "name": "Company + AI Role (e.g. 'IKEA Shopping Assistant')",
-  "description": "One precise sentence: who uses it, what it does, for what company",
-  "color": "hsl values matching the company brand, e.g. hsl(214 100% 34%)",
-  "customerName": "Clean company name only",
-  "tools": [/* 4-6 selected tools with descriptions customized for this company */],
-  "auth0Features": [/* 2-4 features with descriptions referencing this company's compliance needs */],
-  "systemPromptParts": [
-    "You are [Role] for [Company]. [Core mission in 1-2 sentences specific to their domain.]",
-    "[Specific rule about data access / what you can read without approval]",
-    "[Specific rule about which actions ALWAYS require human approval and why]",
-    "[Behavioral rule about tone or limitations specific to this industry]"
+  "name": "[Company] [Role] — short, e.g. 'Fidelity Wealth Advisor' or 'Kaiser Patient Concierge'",
+  "description": "One precise sentence: who uses it, what it automates, for which company.",
+  "color": "hsl(...) matching brand — e.g. hsl(214 100% 34%) for Salesforce blue",
+  "customerName": "Short brand name only",
+  "tools": [
+    {
+      "id": "<tool id from library>",
+      "name": "<tool name>",
+      "description": "<rewritten description specific to this company's context and user role>",
+      "scopes": ["<scopes>"],
+      "requiresApproval": true|false,
+      "mockDelay": <number>
+    }
   ],
-  "knowledgePack": "2-3 sentences explaining which Auth0 features solve this company's SPECIFIC security/compliance pain points."
-}`;
+  "auth0Features": [
+    {
+      "id": "<feature id>",
+      "name": "<feature name>",
+      "description": "<description rewritten to reference this company's specific compliance/security need>",
+      "icon": "<icon name>"
+    }
+  ],
+  "systemPromptParts": [
+    "You are [specific role name] for [Company]. [1-2 sentences about core mission specific to their domain and user type.]",
+    "[Rule: what data you can access without approval and why it's safe — reference specific data types for this company.]",
+    "[Rule: which actions ALWAYS require human approval before execution and what the approval flow looks like.]",
+    "[Rule: industry-specific behavioral constraint, e.g. compliance boundary, data privacy rule, or regulatory limit.]",
+    "[Tone/persona rule: how the agent speaks, what it knows about the company, any company-specific terminology it uses.]"
+  ],
+  "knowledgePack": "2-3 sentences: exactly which Auth0 features solve this company's SPECIFIC pain points and why each one matters for their regulatory/security context.",
+  "autopilotSteps": [
+    {
+      "label": "<short step label, e.g. 'Check Portfolio'>",
+      "message": "<realistic user message that would naturally trigger this tool, phrased as the logged-in user would say it>",
+      "explanation": "<what Auth0 is doing behind the scenes at this step — reference a specific feature and why it applies here>",
+      "feature": "<Auth0 feature name being highlighted>"
+    }
+  ]
+}
 
-      const userMessage = `Create a demo configuration for: "${prompt}"${websiteUrl ? `\nCustomer website: ${websiteUrl}` : ""}${customerName ? `\nCompany name: ${customerName}` : ""}${pageContext ? `\nWebsite context:\n${pageContext}` : ""}`;
+Generate 4-6 autopilotSteps that tell a coherent story: start with a read/lookup, escalate to a sensitive action requiring approval, show Auth0 blocking/gating it, then approval/completion.`;
+
+      const userMessage = `Create a demo for: "${prompt}"${websiteUrl ? `\nCustomer website: ${websiteUrl}` : ""}${customerName ? `\nCompany: ${customerName}` : ""}${pageContext ? `\nWebsite content:\n${pageContext}` : ""}`;
 
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -258,7 +314,7 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
             { role: "system", content: systemPrompt },
             { role: "user", content: userMessage },
           ],
-          temperature: 0.6,
+          temperature: 0.5,
         }),
       });
 
@@ -272,6 +328,7 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
       const data = await response.json();
       const rawContent = data.choices?.[0]?.message?.content || "";
 
+      // Strip any markdown fences
       const jsonStr = rawContent
         .replace(/^```(?:json)?\s*/i, "")
         .replace(/\s*```$/i, "")
@@ -288,6 +345,9 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
       if (!config.name || !config.tools || !config.auth0Features) {
         throw new Error("Incomplete config from AI. Please try again.");
       }
+
+      // Ensure autopilotSteps is always an array
+      if (!Array.isArray(config.autopilotSteps)) config.autopilotSteps = [];
 
       return new Response(JSON.stringify({ config }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
