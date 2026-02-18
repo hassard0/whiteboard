@@ -87,28 +87,32 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Keep a ref so effect closures always see the latest diagrams
-  const diagramsRef = useRef(diagrams);
-  useEffect(() => { diagramsRef.current = diagrams; }, [diagrams]);
-
-  // Keep a ref so effect closures always see the latest svgStore
+  // Track which diagram IDs are currently being rendered to avoid duplicate calls
+  const renderingRef = useRef<Set<string>>(new Set());
+  // Always have fresh access to svgStore without it being a dep
   const svgStoreRef = useRef(svgStore);
   useEffect(() => { svgStoreRef.current = svgStore; }, [svgStore]);
 
   // ─── Render the selected diagram on-demand ───────────────────────────────
   useEffect(() => {
-    const d = diagramsRef.current[selectedDiagramIdx];
+    const d = diagrams[selectedDiagramIdx];
     if (!d?.diagram) return;
-    if (svgStoreRef.current[d.id]) return; // already cached
+    // Skip if already cached or already in-flight
+    if (svgStoreRef.current[d.id]) return;
+    if (renderingRef.current.has(d.id)) return;
 
+    renderingRef.current.add(d.id);
     renderMermaid(d.diagram)
       .then((svg) => {
         setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
       })
       .catch((err) => {
-        console.error(`[Whiteboard] FAILED to render "${d.name}":`, err);
+        console.error(`[Whiteboard] Failed to render "${d.name}":`, err);
+      })
+      .finally(() => {
+        renderingRef.current.delete(d.id);
       });
-  }, [selectedDiagramIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDiagramIdx, diagrams]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   // ─── Draw diagram onto the bottom (diagram) canvas ───────────────────────
