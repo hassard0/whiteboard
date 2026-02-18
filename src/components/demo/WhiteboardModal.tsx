@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown, ZoomIn, ZoomOut } from "lucide-react";
 import { cn } from "@/lib/utils";
-import mermaid from "mermaid";
+import { renderMermaid } from "@/lib/mermaid-queue";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ const BG_OPTIONS = [
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 
-let wbMermaidCounter = 0;
+
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -86,10 +86,8 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // ─── All diagrams are pre-rendered by Concepts.tsx before the modal opens ───
-  // No additional Mermaid rendering needed here — the svgStore is seeded from the
-  // fully-populated renderedSvgCache. If a diagram is still missing for some reason,
-  // we attempt a single render as fallback (sequentially to avoid Mermaid conflicts).
+  // ─── All diagrams are pre-rendered by Concepts.tsx via the shared queue ───
+  // Fallback: if any are still missing, render them through the same queue to avoid conflicts.
   useEffect(() => {
     const missing = diagrams.filter((d) => !svgStore[d.id] && d.diagram);
     if (missing.length === 0) return;
@@ -98,8 +96,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       for (const d of missing) {
         if (cancelled) break;
         try {
-          const id = `wb-fallback-${++wbMermaidCounter}`;
-          const { svg } = await mermaid.render(id, d.diagram!);
+          const svg = await renderMermaid(d.diagram!);
           if (!cancelled) setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
         } catch (err) {
           console.warn(`WhiteboardModal fallback render failed for "${d.name}"`, err);

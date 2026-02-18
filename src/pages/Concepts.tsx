@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import mermaid from "mermaid";
 import { cn } from "@/lib/utils";
+import { renderMermaid } from "@/lib/mermaid-queue";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -53,15 +54,12 @@ mermaid.initialize({
   sequence: { mirrorActors: false, useMaxWidth: true },
 });
 
-let mermaidIdCounter = 0;
-
 // Shared SVG cache so whiteboard can reuse rendered SVGs
 export const renderedSvgCache: Record<string, string> = {};
 
 function MermaidDiagram({ diagram, cacheKey }: { diagram: string; cacheKey?: string }) {
   const [svg, setSvg] = useState<string>(cacheKey ? (renderedSvgCache[cacheKey] ?? "") : "");
   const [error, setError] = useState(false);
-  const idRef = useRef(`mermaid-${++mermaidIdCounter}`);
 
   useEffect(() => {
     if (cacheKey && renderedSvgCache[cacheKey]) {
@@ -69,9 +67,8 @@ function MermaidDiagram({ diagram, cacheKey }: { diagram: string; cacheKey?: str
       return;
     }
     let cancelled = false;
-    mermaid
-      .render(idRef.current, diagram)
-      .then(({ svg: rendered }) => {
+    renderMermaid(diagram)
+      .then((rendered) => {
         if (!cancelled) {
           if (cacheKey) renderedSvgCache[cacheKey] = rendered;
           setSvg(rendered);
@@ -425,14 +422,12 @@ const ALL_DIAGRAMS = [
   ...DEMO_FLOWS.map((d) => ({ id: d.id, name: d.name, diagram: d.diagram })),
 ];
 
-let eagerMermaidCounter = 0;
-
 async function preRenderAllDiagrams() {
   for (const d of ALL_DIAGRAMS) {
     if (renderedSvgCache[d.id]) continue;
     try {
-      const id = `eager-mermaid-${++eagerMermaidCounter}`;
-      const { svg } = await mermaid.render(id, d.diagram);
+      // renderMermaid goes through the global sequential queue — no conflicts
+      const svg = await renderMermaid(d.diagram);
       renderedSvgCache[d.id] = svg;
     } catch (err) {
       console.warn(`Concepts: failed to pre-render "${d.name}"`, err);
