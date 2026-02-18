@@ -99,6 +99,10 @@ export default function Dashboard() {
     await loadPublicDemos();
   };
 
+  const handleEditClick = (demo: any) => {
+    navigate(`/wizard/edit/${demo.id}`);
+  };
+
   const handleDelete = async () => {
     if (!deleteDemo) return;
     setDeleting(true);
@@ -361,7 +365,7 @@ export default function Dashboard() {
                               {/* Edit / Delete — visible on hover */}
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); setEditDemo(demo); }}
+                                  onClick={(e) => { e.stopPropagation(); handleEditClick(demo); }}
                                   className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
                                   title="Edit demo"
                                 >
@@ -462,7 +466,7 @@ export default function Dashboard() {
                             {isOwner && (
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); setEditDemo(demo); }}
+                                  onClick={(e) => { e.stopPropagation(); handleEditClick(demo); }}
                                   className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
                                   title="Edit demo"
                                 >
