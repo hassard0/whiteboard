@@ -62,7 +62,12 @@ async function flush() {
   processing = true;
   while (queue.length > 0) {
     const task = queue.shift()!;
-    await task();
+    try {
+      await task();
+    } catch {
+      // Individual task errors are handled inside the task via reject().
+      // Catching here ensures the queue keeps processing even if something unexpected throws.
+    }
   }
   processing = false;
 }
@@ -73,21 +78,18 @@ export function renderMermaid(diagramText: string): Promise<string> {
     queue.push(async () => {
       const id = `mermaid-q-${++counter}`;
 
-      // Mermaid v11 needs a real DOM element attached to the body for some diagram types.
-      // Create a hidden off-screen container, render into it, then remove it.
-      const container = document.createElement("div");
-      container.id = id;
-      container.style.cssText = "position:absolute;top:-9999px;left:-9999px;visibility:hidden;";
-      document.body.appendChild(container);
+      // Remove any stale element with this ID before rendering
+      document.getElementById(id)?.remove();
 
       try {
-        const { svg } = await mermaid.render(id, diagramText, container);
+        // Mermaid v11: render(id, text) — returns { svg }
+        const { svg } = await mermaid.render(id, diagramText);
+        if (!svg) throw new Error("mermaid.render returned empty SVG");
         resolve(svg);
       } catch (err) {
         reject(err);
       } finally {
-        container.remove();
-        // Also clean up any detached SVG mermaid may have left in the body
+        // Clean up any DOM node mermaid may have left behind
         document.getElementById(id)?.remove();
       }
     });

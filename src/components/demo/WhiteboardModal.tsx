@@ -71,6 +71,8 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   const [svgStore, setSvgStore] = useState<Record<string, string>>(() =>
     Object.fromEntries(diagrams.filter((d) => d.svg).map((d) => [d.id, d.svg]))
   );
+  // Track diagrams that failed to render so we don't retry forever
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
 
   const lastPos = useRef<{ x: number; y: number } | null>(null);
   const isPanning = useRef(false);
@@ -97,9 +99,10 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   useEffect(() => {
     const d = diagrams[selectedDiagramIdx];
     if (!d?.diagram) return;
-    // Skip if already cached or already in-flight
+    // Skip if already cached, already in-flight, or previously failed
     if (svgStoreRef.current[d.id]) return;
     if (renderingRef.current.has(d.id)) return;
+    if (failedIds.has(d.id)) return;
 
     renderingRef.current.add(d.id);
     renderMermaid(d.diagram)
@@ -108,11 +111,12 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       })
       .catch((err) => {
         console.error(`[Whiteboard] Failed to render "${d.name}":`, err);
+        setFailedIds((prev) => new Set(prev).add(d.id));
       })
       .finally(() => {
         renderingRef.current.delete(d.id);
       });
-  }, [selectedDiagramIdx, diagrams]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDiagramIdx, diagrams, failedIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   // ─── Draw diagram onto the bottom (diagram) canvas ───────────────────────
@@ -327,6 +331,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
 
   const selectedDiagram = diagrams[selectedDiagramIdx];
   const currentSvgReady = !!(svgStore[selectedDiagram?.id ?? ""]);
+  const currentFailed = selectedDiagram ? failedIds.has(selectedDiagram.id) : false;
 
   return (
     <AnimatePresence>
@@ -556,9 +561,15 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
 
           {/* ── Canvas area ── */}
           <div ref={containerRef} className="flex-1 overflow-hidden relative select-none">
-            {!currentSvgReady && (
+            {!currentSvgReady && !currentFailed && (
               <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
                 <span className="text-xs text-muted-foreground animate-pulse">Rendering diagram…</span>
+              </div>
+            )}
+            {currentFailed && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none gap-2">
+                <span className="text-xs text-destructive">Failed to render diagram</span>
+                <span className="text-[10px] text-muted-foreground">Check browser console for details</span>
               </div>
             )}
 
