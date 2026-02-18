@@ -416,37 +416,12 @@ const DEMO_FLOWS = [
   },
 ];
 
-// ─── Eagerly pre-render ALL diagrams on page load so the whiteboard cache is always full ───
-const ALL_DIAGRAMS = [
-  ...CONCEPTS.map((c) => ({ id: c.id, name: c.name, diagram: c.diagram })),
-  ...DEMO_FLOWS.map((d) => ({ id: d.id, name: d.name, diagram: d.diagram })),
-];
-
-async function preRenderAllDiagrams() {
-  for (const d of ALL_DIAGRAMS) {
-    if (renderedSvgCache[d.id]) continue;
-    try {
-      // renderMermaid goes through the global sequential queue — no conflicts
-      const svg = await renderMermaid(d.diagram);
-      renderedSvgCache[d.id] = svg;
-    } catch (err) {
-      console.warn(`Concepts: failed to pre-render "${d.name}"`, err);
-    }
-  }
-}
-
 export default function Concepts() {
   const [activeTab, setActiveTab] = useState("concepts");
   const [modalDiagram, setModalDiagram] = useState<{ diagram: string; title: string } | null>(null);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
-  const [cacheReady, setCacheReady] = useState(false);
 
-  // Pre-render every diagram sequentially on mount so whiteboard always has them all
-  useEffect(() => {
-    preRenderAllDiagrams().then(() => setCacheReady(true));
-  }, []);
-
-  // Build diagram list for whiteboard — always reads from the fully-populated cache
+  // Build diagram list for whiteboard — pass svg from cache if available, always pass source diagram text
   const buildWhiteboardDiagrams = () => [
     ...CONCEPTS.map((c) => ({ id: c.id, name: c.name, svg: renderedSvgCache[c.id] ?? "", diagram: c.diagram })),
     ...DEMO_FLOWS.map((d) => ({ id: d.id, name: d.name, svg: renderedSvgCache[d.id] ?? "", diagram: d.diagram })),
@@ -482,21 +457,13 @@ export default function Concepts() {
 
               {/* Whiteboard button */}
               <motion.button
-                onClick={() => cacheReady && setWhiteboardOpen(true)}
-                whileHover={{ scale: cacheReady ? 1.08 : 1 }}
-                whileTap={{ scale: cacheReady ? 0.95 : 1 }}
-                title={cacheReady ? "Open Whiteboard" : "Loading diagrams…"}
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full border bg-card shadow-sm transition-colors",
-                  cacheReady
-                    ? "border-border/60 text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/10"
-                    : "border-border/40 text-muted-foreground/40 cursor-wait"
-                )}
+                onClick={() => setWhiteboardOpen(true)}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.95 }}
+                title="Open Whiteboard"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground shadow-sm hover:border-primary/50 hover:text-primary hover:bg-primary/10 transition-colors"
               >
-                {cacheReady
-                  ? <PenLine className="h-4 w-4" />
-                  : <PenLine className="h-4 w-4 animate-pulse" />
-                }
+                <PenLine className="h-4 w-4" />
               </motion.button>
             </div>
 
