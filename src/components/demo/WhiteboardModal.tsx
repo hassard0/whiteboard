@@ -88,17 +88,22 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   }, [onClose]);
 
   // ─── Render the selected diagram on-demand ───────────────────────────────
-  // Only ever renders ONE diagram at a time → no Mermaid conflicts.
   useEffect(() => {
     const d = diagrams[selectedDiagramIdx];
-    if (!d || svgStore[d.id]) return; // already cached
-    if (!d.diagram) return;
-    let cancelled = false;
-    renderMermaid(d.diagram).then((svg) => {
-      if (!cancelled) setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
-    }).catch((err) => console.warn(`WhiteboardModal: render failed for "${d.name}"`, err));
-    return () => { cancelled = true; };
-  }, [selectedDiagramIdx, diagrams]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!d?.diagram) return;
+    if (svgStore[d.id]) return; // already in cache
+
+    console.log(`[Whiteboard] Rendering: ${d.name}`);
+    renderMermaid(d.diagram)
+      .then((svg) => {
+        console.log(`[Whiteboard] Success: ${d.name}`);
+        setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
+      })
+      .catch((err) => {
+        console.error(`[Whiteboard] FAILED: ${d.name}`, err);
+      });
+    // No cleanup / cancellation — let the render complete and cache the result
+  }, [selectedDiagramIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Draw diagram onto the bottom (diagram) canvas ───────────────────────
   const drawDiagram = useCallback(() => {
