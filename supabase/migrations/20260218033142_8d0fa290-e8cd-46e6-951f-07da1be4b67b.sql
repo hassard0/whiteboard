@@ -1,0 +1,2 @@
+ALTER TABLE public.demo_environments DROP CONSTRAINT demo_environments_env_type_check;
+ALTER TABLE public.demo_environments ADD CONSTRAINT demo_environments_env_type_check CHECK (env_type = ANY (ARRAY['ephemeral'::text, 'persistent'::text, 'snapshot'::text, 'custom'::text]));
