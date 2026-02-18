@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown, ZoomIn, ZoomOut } from "lucide-react";
+import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { renderMermaid } from "@/lib/mermaid-queue";
 
@@ -23,6 +23,7 @@ type Tool = "draw" | "highlight" | "erase";
 // ─── Palette colours ─────────────────────────────────────────────────────────
 
 const PALETTE = [
+  { label: "Red",     value: "hsl(0 85% 60%)"   },
   { label: "Purple",  value: "hsl(262 83% 68%)" },
   { label: "Teal",    value: "hsl(174 62% 57%)" },
   { label: "Gold",    value: "hsl(45 90% 60%)"  },
@@ -56,7 +57,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
 
   const [selectedDiagramIdx, setSelectedDiagramIdx] = useState(0);
   const [tool, setTool] = useState<Tool>("draw");
-  const [color, setColor] = useState(PALETTE[0].value);
+  const [color, setColor] = useState(PALETTE[0].value); // Red by default
   const [bg, setBg] = useState(BG_OPTIONS[0].value);
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -86,26 +87,18 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // ─── All diagrams are pre-rendered by Concepts.tsx via the shared queue ───
-  // Fallback: if any are still missing, render them through the same queue to avoid conflicts.
+  // ─── Render the selected diagram on-demand ───────────────────────────────
+  // Only ever renders ONE diagram at a time → no Mermaid conflicts.
   useEffect(() => {
-    const missing = diagrams.filter((d) => !svgStore[d.id] && d.diagram);
-    if (missing.length === 0) return;
+    const d = diagrams[selectedDiagramIdx];
+    if (!d || svgStore[d.id]) return; // already cached
+    if (!d.diagram) return;
     let cancelled = false;
-    (async () => {
-      for (const d of missing) {
-        if (cancelled) break;
-        try {
-          const svg = await renderMermaid(d.diagram!);
-          if (!cancelled) setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
-        } catch (err) {
-          console.warn(`WhiteboardModal fallback render failed for "${d.name}"`, err);
-        }
-      }
-    })();
+    renderMermaid(d.diagram).then((svg) => {
+      if (!cancelled) setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
+    }).catch((err) => console.warn(`WhiteboardModal: render failed for "${d.name}"`, err));
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedDiagramIdx, diagrams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Draw diagram onto the bottom (diagram) canvas ───────────────────────
   const drawDiagram = useCallback(() => {
@@ -354,6 +347,17 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
               </button>
               {showDiagramPicker && (
                 <div className="absolute top-full left-0 mt-1 z-20 min-w-[200px] rounded-xl border border-border bg-card shadow-xl py-1">
+                  {/* Blank / clear selection entry */}
+                  <button
+                    onClick={() => { setSelectedDiagramIdx(-1); setShowDiagramPicker(false); setPan({ x: 0, y: 0 }); setZoom(1); }}
+                    className={cn(
+                      "flex w-full items-center px-3 py-2 text-xs text-left hover:bg-accent transition-colors text-muted-foreground italic",
+                      selectedDiagramIdx === -1 && "text-primary font-semibold"
+                    )}
+                  >
+                    — None —
+                  </button>
+                  <div className="my-1 border-t border-border/40" />
                   {diagrams.map((d, i) => (
                     <button
                       key={d.id}
@@ -492,7 +496,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
                 className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 title="Zoom out"
               >
-                <ZoomOut className="h-3.5 w-3.5" />
+                <Minus className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={() => setZoom(1)}
@@ -506,7 +510,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
                 className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 title="Zoom in"
               >
-                <ZoomIn className="h-3.5 w-3.5" />
+                <Plus className="h-3.5 w-3.5" />
               </button>
             </div>
 
