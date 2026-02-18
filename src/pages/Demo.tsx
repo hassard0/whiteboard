@@ -16,6 +16,8 @@ import { AutopilotControls } from "@/components/demo/AutopilotControls";
 import { ArchitectureShelf } from "@/components/demo/ArchitectureShelf";
 import { toast } from "sonner";
 import auth0Shield from "@/assets/auth0-shield.svg";
+import { supabase } from "@/integrations/supabase/client";
+
 
 interface ChatMessage {
   id: string;
@@ -33,7 +35,32 @@ export default function DemoPage() {
   const baseTemplate = getTemplateById(templateId || "");
 
   const builderConfig = (location.state as any)?.builderConfig;
-  const customDemo = (location.state as any)?.customDemo;
+  const customDemoFromState = (location.state as any)?.customDemo;
+
+  // If no customDemo state was passed (e.g. page refresh or direct URL on generic-agent),
+  // look up the user's most-recent custom env for this template from the DB.
+  const [loadedCustomDemo, setLoadedCustomDemo] = useState<any | null>(null);
+  const [loadingCustomDemo, setLoadingCustomDemo] = useState(false);
+
+  useEffect(() => {
+    if (customDemoFromState || !user?.sub || templateId !== "generic-agent") return;
+    setLoadingCustomDemo(true);
+    supabase
+      .from("demo_environments")
+      .select("config_overrides")
+      .eq("auth0_sub", user.sub)
+      .eq("template_id", "generic-agent")
+      .eq("env_type", "custom")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .single()
+      .then(({ data }) => {
+        if (data?.config_overrides) setLoadedCustomDemo(data.config_overrides);
+        setLoadingCustomDemo(false);
+      });
+  }, [customDemoFromState, user?.sub, templateId]);
+
+  const customDemo = customDemoFromState || loadedCustomDemo;
 
   // Build the template — support custom wizard demos, builder configs, or pre-built
   const template = customDemo
@@ -130,6 +157,14 @@ export default function DemoPage() {
       ...prev,
     ]);
   }, []);
+
+  if (loadingCustomDemo) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!template) {
     return (

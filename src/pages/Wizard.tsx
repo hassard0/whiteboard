@@ -228,12 +228,56 @@ export default function WizardPage() {
   };
 
   // ─── Navigation ───
+  // When editing, allow jumping to any step freely; when creating, only allow going back to visited steps
+  const canGoToStep = (targetStep: number) => {
+    if (editingDemo) return true; // editing = full freedom
+    return targetStep <= step;
+  };
+
   const canAdvance = () => {
     if (step === 0) return state.name.trim() && (state.industry || !!editingDemo);
     if (step === 1) return state.selectedTools.length > 0 || state.customTools.length > 0;
     if (step === 2) return state.selectedFeatures.length > 0;
     if (step === 3) return state.systemPrompt.trim();
     return true;
+  };
+
+  // ─── Save (without launching) ───
+  const handleSave = async () => {
+    if (!user?.sub || !editingDemo) return;
+    setSaving(true);
+    const allTools = [...state.selectedTools, ...state.customTools];
+    const features = AUTH0_FEATURE_LIBRARY.filter((f) => state.selectedFeatures.includes(f.id));
+    const customConfig = {
+      wizard: true,
+      name: state.name,
+      description: state.description,
+      industry: state.industry,
+      color: state.color,
+      icon: state.icon,
+      tools: allTools,
+      auth0Features: features,
+      systemPromptParts: [state.systemPrompt],
+      knowledgePack: state.knowledgePack,
+      autopilotSteps: state.autopilotSteps,
+      isPublic: state.isPublic,
+    };
+    try {
+      const existingCfg = editingDemo.config_overrides as any;
+      const { error } = await supabase
+        .from("demo_environments")
+        .update({
+          config_overrides: { ...existingCfg, ...customConfig } as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editingDemo.id);
+      if (error) throw error;
+      toast.success("Demo saved!");
+    } catch (e: any) {
+      toast.error("Failed to save: " + e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ─── Save & Launch ───
@@ -325,9 +369,22 @@ export default function WizardPage() {
             <img src={auth0Shield} alt="Auth0" className="h-5 w-5 invert" />
             <div>
               <h1 className="text-sm font-semibold text-foreground">Demo Wizard</h1>
-              <span className="text-xs text-muted-foreground">{editingDemo ? "Edit your demo" : "Create a custom demo"}</span>
+              <span className="text-xs text-muted-foreground">{editingDemo ? `Editing: ${state.name || "Demo"}` : "Create a custom demo"}</span>
             </div>
           </div>
+          {/* Save button in header — only shown when editing */}
+          {editingDemo && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSave}
+              disabled={saving}
+              className="text-xs"
+            >
+              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+              Save
+            </Button>
+          )}
         </div>
       </header>
 
@@ -338,14 +395,14 @@ export default function WizardPage() {
             {STEPS.map((s, i) => (
               <div key={s.id} className="flex items-center gap-1">
                 <button
-                  onClick={() => i <= step && setStep(i)}
-                  disabled={i > step}
+                  onClick={() => canGoToStep(i) && setStep(i)}
+                  disabled={!canGoToStep(i)}
                   className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                     i === step
                       ? "bg-primary text-primary-foreground"
-                      : i < step
+                      : canGoToStep(i)
                       ? "bg-primary/10 text-primary cursor-pointer hover:bg-primary/20"
-                      : "bg-secondary text-muted-foreground"
+                      : "bg-secondary text-muted-foreground cursor-not-allowed"
                   }`}
                 >
                   {i < step ? <Check className="h-3 w-3" /> : null}
@@ -798,15 +855,29 @@ export default function WizardPage() {
             <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
           </Button>
 
-          {step < STEPS.length - 1 && (
-            <Button
-              onClick={() => setStep((s) => s + 1)}
-              disabled={!canAdvance()}
-              className="gradient-auth0 text-primary-foreground"
-            >
-              Next <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Save without launching — shown on all steps when editing */}
+            {editingDemo && step < STEPS.length - 1 && (
+              <Button
+                variant="outline"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
+                Save
+              </Button>
+            )}
+
+            {step < STEPS.length - 1 && (
+              <Button
+                onClick={() => setStep((s) => s + 1)}
+                disabled={!canAdvance()}
+                className="gradient-auth0 text-primary-foreground"
+              >
+                Next <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </main>
     </div>
