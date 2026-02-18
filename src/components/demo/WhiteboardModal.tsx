@@ -262,12 +262,23 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       const { data, error } = await supabase.functions.invoke("generate-mermaid", {
         body: { description: magicPrompt.trim() },
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message ?? "Edge function error");
       const mermaidCode: string = data?.mermaid;
-      if (!mermaidCode) throw new Error("No diagram returned");
+      if (!mermaidCode) throw new Error("No diagram code returned from AI");
 
-      // Render it
-      const svg = await renderMermaid(mermaidCode);
+      // Attempt to render; on failure, retry once with sanitised fallback
+      let svg: string;
+      try {
+        svg = await renderMermaid(mermaidCode);
+      } catch (renderErr: any) {
+        console.warn("[Magic] First render failed, retrying sanitised:", renderErr?.message);
+        // Drop lines with bare colons in unquoted node labels — common LLM mistake
+        const cleaned = mermaidCode.split("\n").filter((l) => {
+          const t = l.trim();
+          return !(t.match(/^\w+\[.*:.*\]/) && !t.includes('"'));
+        }).join("\n");
+        svg = await renderMermaid(cleaned);
+      }
 
       const id = `custom-${Date.now()}`;
       const name = magicPrompt.trim().slice(0, 40) + (magicPrompt.length > 40 ? "…" : "");
@@ -285,6 +296,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       setShowMagicModal(false);
       setMagicPrompt("");
     } catch (err: any) {
+      console.error("[Magic] generation failed:", err);
       setMagicError(err?.message ?? "Generation failed — please try again");
     } finally {
       setMagicLoading(false);
