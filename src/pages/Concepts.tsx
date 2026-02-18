@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import mermaid from "mermaid";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Shield, Key, UserCheck, ArrowRightLeft, FileText, User,
   Plane, Briefcase, ShoppingBag, Code, Wrench,
-  Globe, Lock, Database, CheckCircle, GitBranch,
+  Globe, Lock, Database, CheckCircle, GitBranch, X, Maximize2,
 } from "lucide-react";
 
 // ─── Mermaid init ───
@@ -90,6 +90,59 @@ function MermaidDiagram({ diagram }: { diagram: string }) {
       className="overflow-x-auto [&_svg]:max-w-full [&_svg]:h-auto [&_svg]:mx-auto"
       dangerouslySetInnerHTML={{ __html: svg }}
     />
+  );
+}
+
+// ─── Fullscreen Modal ───
+function DiagramModal({ diagram, title, onClose }: { diagram: string; title: string; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        className="fixed inset-0 z-50 flex items-center justify-center p-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      >
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-background/90 backdrop-blur-md" />
+
+        {/* Content */}
+        <motion.div
+          className="relative z-10 w-full max-w-5xl rounded-2xl border border-border/60 bg-card shadow-2xl overflow-hidden"
+          initial={{ scale: 0.92, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.92, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 28 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border/40">
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">{title}</span>
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Diagram */}
+          <div className="p-8 overflow-auto max-h-[80vh]">
+            <MermaidDiagram diagram={diagram} />
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
@@ -277,27 +330,21 @@ const DEMO_FLOWS = [
     icon: Briefcase,
     color: "hsl(174 62% 47%)",
     description: "Demonstrates delegated access with consent flows for email and calendar management.",
-    diagram: `sequenceDiagram
-  participant U as 👤 User
-  participant A as 🤖 Exec Assistant
-  participant AZ as Auth0
-  participant CAL as Calendar API
-  participant EMAIL as Email API
-  U->>A: Schedule meeting with Alice
-  A->>AZ: Use delegated token
-  A->>CAL: read_calendar
-  CAL-->>A: Available slots
-  A->>AZ: Request consent for schedule_meeting
-  AZ->>U: Confirm: create event at 3pm?
-  U->>AZ: Approve
-  AZ->>A: Consent granted
-  A->>CAL: Create event via Token Vault
-  CAL-->>A: Event created
-  A->>AZ: Request consent for send_email
-  AZ->>U: Confirm: send invite to Alice?
-  U->>AZ: Approve
-  A->>EMAIL: Send invite via Token Vault
-  EMAIL-->>A: Sent`,
+    diagram: `graph TD
+  U(["👤 User"]) -->|Schedule meeting with Alice| AG(["🤖 Exec Assistant"])
+  AG -->|Use delegated token| AZ["Auth0"]
+  AG -->|read_calendar| CAL["Calendar API"]
+  CAL -->|Available slots| AG
+  AG -->|Request consent: schedule_meeting| AA1{"Async Authorization"}
+  AA1 -->|Confirm: create event at 3pm?| U
+  U -->|✅ Approve| AA1
+  AA1 -->|Token Vault: calendar token| CAL2["Create Event"]
+  CAL2 -->|Event created| AG
+  AG -->|Request consent: send_email| AA2{"Async Authorization"}
+  AA2 -->|Confirm: send invite to Alice?| U
+  U -->|✅ Approve| AA2
+  AA2 -->|Token Vault: email token| EMAIL["Email API"]
+  EMAIL -->|Sent| AG`,
   },
   {
     id: "personal-shopper",
@@ -362,6 +409,7 @@ const DEMO_FLOWS = [
 
 export default function Concepts() {
   const [activeTab, setActiveTab] = useState("concepts");
+  const [modalDiagram, setModalDiagram] = useState<{ diagram: string; title: string } | null>(null);
 
   return (
     <DashboardLayout>
@@ -419,11 +467,17 @@ export default function Concepts() {
                         <CardContent className="flex flex-col flex-1 gap-4">
                           <p className="text-sm text-muted-foreground">{concept.summary}</p>
 
-                          {/* Diagram */}
-                          <div className="rounded-xl border border-border/40 bg-background/60 p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <GitBranch className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground font-mono">Flow Diagram</span>
+                          {/* Diagram — click to expand */}
+                          <div
+                            className="group relative rounded-xl border border-border/40 bg-background/60 p-4 cursor-pointer hover:border-border/70 transition-colors"
+                            onClick={() => setModalDiagram({ diagram: concept.diagram, title: concept.name })}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="flex items-center gap-2">
+                                <GitBranch className="h-3 w-3 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground font-mono">Flow Diagram</span>
+                              </div>
+                              <Maximize2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
                             <MermaidDiagram diagram={concept.diagram} />
                           </div>
@@ -580,6 +634,15 @@ export default function Concepts() {
           </Tabs>
         </main>
       </div>
+
+      {/* Fullscreen diagram modal */}
+      {modalDiagram && (
+        <DiagramModal
+          diagram={modalDiagram.diagram}
+          title={modalDiagram.title}
+          onClose={() => setModalDiagram(null)}
+        />
+      )}
     </DashboardLayout>
   );
 }
