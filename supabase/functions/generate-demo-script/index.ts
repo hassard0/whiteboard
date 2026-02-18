@@ -96,8 +96,8 @@ Make this script detailed enough that a new SE could pick it up and run the demo
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.7,
-        max_tokens: 2500,
+          temperature: 0.7,
+          max_completion_tokens: 2500,
       }),
     });
 
