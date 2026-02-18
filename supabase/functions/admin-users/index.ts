@@ -6,7 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const AUTH0_DOMAIN = Deno.env.get("AUTH0_DOMAIN") || Deno.env.get("VITE_AUTH0_DOMAIN") || "";
+// Strip any protocol prefix in case the secret was stored as a full URL
+const rawDomain = Deno.env.get("AUTH0_DOMAIN") || Deno.env.get("VITE_AUTH0_DOMAIN") || "";
+const AUTH0_DOMAIN = rawDomain.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
 const AUTH0_MGMT_CLIENT_ID = Deno.env.get("AUTH0_MGMT_CLIENT_ID") || "";
 const AUTH0_MGMT_CLIENT_SECRET = Deno.env.get("AUTH0_MGMT_CLIENT_SECRET") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
