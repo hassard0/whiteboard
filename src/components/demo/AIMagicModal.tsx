@@ -68,14 +68,16 @@ export function AIMagicModal({ open, onClose, onGenerated }: AIMagicModalProps) 
       let logoUrl: string | undefined;
       let customerName: string | undefined;
 
+      let pageContext: string | undefined;
       if (websiteUrl.trim()) {
-        setStatusMsg("Fetching brand assets from website…");
+        setStatusMsg("Fetching brand assets and company context…");
         try {
           const { data: logoData } = await supabase.functions.invoke("ai-demo-generator", {
             body: { action: "fetch_logo", url: websiteUrl.trim() },
           });
           if (logoData?.logoUrl) logoUrl = logoData.logoUrl;
           if (logoData?.companyName) customerName = logoData.companyName;
+          if (logoData?.pageContext) pageContext = logoData.pageContext;
         } catch (e) {
           console.warn("Logo fetch failed, continuing without logo", e);
         }
@@ -89,6 +91,7 @@ export function AIMagicModal({ open, onClose, onGenerated }: AIMagicModalProps) 
           prompt: prompt.trim(),
           websiteUrl: websiteUrl.trim() || undefined,
           customerName,
+          pageContext,
         },
       });
 

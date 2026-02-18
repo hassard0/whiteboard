@@ -9,7 +9,11 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plane, Briefcase, ShoppingBag, Code, Wrench, Plus, Sparkles } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Plane, Briefcase, ShoppingBag, Code, Wrench, Plus, Sparkles, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { AIMagicModal } from "@/components/demo/AIMagicModal";
 import { toast } from "sonner";
@@ -25,6 +29,12 @@ export default function Dashboard() {
 
   const [customDemos, setCustomDemos] = useState<any[]>([]);
   const [magicOpen, setMagicOpen] = useState(false);
+  const [editDemo, setEditDemo] = useState<any | null>(null);
+  const [deleteDemo, setDeleteDemo] = useState<any | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadCustomDemos = useCallback(async () => {
     if (!user?.sub) return;
@@ -32,7 +42,8 @@ export default function Dashboard() {
       .from("demo_environments")
       .select("*")
       .eq("auth0_sub", user.sub)
-      .eq("env_type", "custom");
+      .eq("env_type", "custom")
+      .order("created_at", { ascending: false });
     if (data) setCustomDemos(data);
   }, [user?.sub]);
 
@@ -40,7 +51,6 @@ export default function Dashboard() {
 
   const handleAIGenerated = async (config: any) => {
     if (!user?.sub) return;
-    // Pick first available template as base, or generic
     const baseTemplateId = "generic-agent";
     const envId = generateEnvId(user.sub, `custom-${Date.now()}`);
     try {
@@ -51,15 +61,57 @@ export default function Dashboard() {
         env_type: "custom",
         config_overrides: config as any,
       });
-      if (error) {
-        console.error("Supabase insert error:", error);
-        throw error;
-      }
+      if (error) throw error;
       toast.success(`"${config.name}" demo created!`);
       await loadCustomDemos();
     } catch (e: any) {
-      console.error("handleAIGenerated error:", e);
       toast.error("Failed to save demo: " + (e.message || e.details || JSON.stringify(e)));
+    }
+  };
+
+  const openEdit = (demo: any) => {
+    const cfg = demo.config_overrides as any;
+    setEditName(cfg.name || "");
+    setEditDesc(cfg.description || "");
+    setEditDemo(demo);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editDemo) return;
+    setSaving(true);
+    try {
+      const cfg = { ...(editDemo.config_overrides as any), name: editName, description: editDesc };
+      const { error } = await supabase
+        .from("demo_environments")
+        .update({ config_overrides: cfg })
+        .eq("id", editDemo.id);
+      if (error) throw error;
+      toast.success("Demo updated!");
+      setEditDemo(null);
+      await loadCustomDemos();
+    } catch (e: any) {
+      toast.error("Failed to update: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteDemo) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("demo_environments")
+        .delete()
+        .eq("id", deleteDemo.id);
+      if (error) throw error;
+      toast.success("Demo deleted.");
+      setDeleteDemo(null);
+      await loadCustomDemos();
+    } catch (e: any) {
+      toast.error("Failed to delete: " + e.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -76,6 +128,53 @@ export default function Dashboard() {
         onGenerated={handleAIGenerated}
       />
 
+      {/* Edit Dialog */}
+      <Dialog open={!!editDemo} onOpenChange={(o) => !o && setEditDemo(null)}>
+        <DialogContent className="sm:max-w-md border-border/60 bg-card/95 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4 text-primary" /> Edit Demo
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Demo Name</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="bg-secondary/50" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} className="bg-secondary/50 resize-none min-h-[80px]" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditDemo(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={saving || !editName.trim()} className="rounded-full bg-foreground text-background hover:bg-foreground/90">
+              {saving ? "Saving…" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deleteDemo} onOpenChange={(o) => !o && setDeleteDemo(null)}>
+        <DialogContent className="sm:max-w-sm border-border/60 bg-card/95 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-4 w-4" /> Delete Demo
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Are you sure you want to delete <span className="font-medium text-foreground">"{(deleteDemo?.config_overrides as any)?.name}"</span>? This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteDemo(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting} className="rounded-full">
+              {deleting ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <main className="relative z-10 mx-auto max-w-7xl px-6 py-12">
         <div className="mb-10 flex items-end justify-between">
           <div>
@@ -91,7 +190,6 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {/* AI Magic Button */}
             <motion.button
               onClick={() => setMagicOpen(true)}
               whileHover={{ scale: 1.05 }}
@@ -134,28 +232,46 @@ export default function Dashboard() {
                     className="flex"
                   >
                     <Card
-                      className="group flex flex-col w-full cursor-pointer border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
-                      onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
+                      className="group flex flex-col w-full border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
                     >
                       <CardHeader>
-                        <div className="mb-3 flex items-center gap-3">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-xl overflow-hidden" style={{ backgroundColor: `${cfg.color || "hsl(262 83% 58%)"}15` }}>
-                            {cfg.customerLogo ? (
-                              <img
-                                src={cfg.customerLogo}
-                                alt={cfg.customerName || cfg.name}
-                                className="h-8 w-8 object-contain"
-                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                              />
-                            ) : (
-                              <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
+                        <div className="mb-3 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${cfg.color || "hsl(262 83% 58%)"}15` }}>
+                              {cfg.customerLogo ? (
+                                <img
+                                  src={cfg.customerLogo}
+                                  alt={cfg.customerName || cfg.name}
+                                  className="h-8 w-8 object-contain"
+                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                />
+                              ) : (
+                                <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
+                              )}
+                            </div>
+                            {cfg.customerName && (
+                              <span className="text-xs text-muted-foreground font-medium">{cfg.customerName}</span>
                             )}
                           </div>
-                          {cfg.customerName && (
-                            <span className="text-xs text-muted-foreground font-medium">{cfg.customerName}</span>
-                          )}
+                          {/* Edit / Delete actions */}
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openEdit(demo); }}
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
+                              title="Edit demo"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeleteDemo(demo); }}
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              title="Delete demo"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
-                        <CardTitle className="text-lg">{cfg.name}</CardTitle>
+                        <CardTitle className="text-lg cursor-pointer" onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}>{cfg.name}</CardTitle>
                         <CardDescription>{cfg.description}</CardDescription>
                       </CardHeader>
                       <CardContent className="flex flex-col flex-1">
@@ -165,7 +281,11 @@ export default function Dashboard() {
                           ))}
                         </div>
                         <div className="mt-auto pt-4">
-                          <Button size="sm" className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4">
+                          <Button
+                            size="sm"
+                            className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
+                            onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
+                          >
                             Launch Demo
                           </Button>
                         </div>
