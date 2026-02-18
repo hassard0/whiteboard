@@ -4,19 +4,19 @@ import { useEffect, useState } from "react";
 import { DEMO_TEMPLATES } from "@/lib/demo-templates";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth0ProfileSync } from "@/hooks/use-auth0-profile-sync";
+import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Plane, Briefcase, ShoppingBag, Code, Wrench, Shield, Plus, Sparkles } from "lucide-react";
+import { Plane, Briefcase, ShoppingBag, Code, Wrench, Plus, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
-import auth0Logo from "@/assets/auth0-logo-full-white.png";
 
 const iconMap: Record<string, React.ElementType> = {
   Plane, Briefcase, ShoppingBag, Code, Wrench,
 };
 
 export default function Dashboard() {
-  const { user, logout } = useAuth0();
+  const { user } = useAuth0();
   const navigate = useNavigate();
   useAuth0ProfileSync();
 
@@ -34,34 +34,12 @@ export default function Dashboard() {
   }, [user?.sub]);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header — matches auth0.com nav style */}
-      <header className="border-b border-border/50">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="flex items-center gap-2.5">
-            <img src={auth0Logo} alt="Auth0 by Okta" className="h-6" />
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">{user?.email}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full text-muted-foreground hover:text-foreground"
-              onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign out
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <DashboardLayout>
       {/* Hero gradient */}
       <div className="pointer-events-none absolute left-0 right-0 top-16 h-72 z-0" style={{
         background: "radial-gradient(ellipse at 50% 0%, hsl(262 80% 50% / 0.2) 0%, hsl(240 60% 45% / 0.1) 50%, transparent 80%)",
       }} />
 
-      {/* Main */}
       <main className="relative z-10 mx-auto max-w-7xl px-6 py-12">
         <div className="mb-10 flex items-end justify-between">
           <div>
@@ -90,7 +68,7 @@ export default function Dashboard() {
             <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" /> Your Custom Demos
             </h2>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
               {customDemos.map((demo, i) => {
                 const cfg = demo.config_overrides as any;
                 if (!cfg?.wizard) return null;
@@ -100,9 +78,10 @@ export default function Dashboard() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: i * 0.08 }}
+                    className="flex"
                   >
                     <Card
-                      className="group cursor-pointer border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
+                      className="group flex flex-col w-full cursor-pointer border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
                       onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
                     >
                       <CardHeader>
@@ -112,13 +91,13 @@ export default function Dashboard() {
                         <CardTitle className="text-lg">{cfg.name}</CardTitle>
                         <CardDescription>{cfg.description}</CardDescription>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="flex flex-col flex-1">
                         <div className="flex flex-wrap gap-2">
                           {(cfg.auth0Features || []).map((f: any) => (
                             <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
                           ))}
                         </div>
-                        <div className="mt-4">
+                        <div className="mt-auto pt-4">
                           <Button size="sm" className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4">
                             Launch Demo
                           </Button>
@@ -134,7 +113,7 @@ export default function Dashboard() {
 
         {/* Pre-built templates */}
         <h2 className="text-lg font-semibold text-foreground mb-4">Pre-Built Templates</h2>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
           {DEMO_TEMPLATES.map((template, i) => {
             const Icon = iconMap[template.icon] || Wrench;
             return (
@@ -143,9 +122,10 @@ export default function Dashboard() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: i * 0.08 }}
+                className="flex"
               >
                 <Card
-                  className="group cursor-pointer border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
+                  className="group flex flex-col w-full cursor-pointer border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
                   onClick={() => navigate(`/demo/${template.id}`)}
                 >
                   <CardHeader>
@@ -155,7 +135,7 @@ export default function Dashboard() {
                     <CardTitle className="text-lg">{template.name}</CardTitle>
                     <CardDescription>{template.description}</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex flex-col flex-1">
                     <div className="flex flex-wrap gap-2">
                       {template.auth0Features.map((f) => (
                         <Badge key={f.id} variant="secondary" className="text-xs">
@@ -163,7 +143,7 @@ export default function Dashboard() {
                         </Badge>
                       ))}
                     </div>
-                    <div className="mt-4 flex gap-2">
+                    <div className="mt-auto pt-4 flex gap-2">
                       <Button
                         size="sm"
                         variant="outline"
@@ -187,6 +167,6 @@ export default function Dashboard() {
           })}
         </div>
       </main>
-    </div>
+    </DashboardLayout>
   );
 }
