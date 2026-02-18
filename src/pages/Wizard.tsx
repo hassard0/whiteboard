@@ -277,9 +277,9 @@ export default function WizardPage() {
         const templateId = editingDemo.template_id;
         navigate(`/demo/${templateId}`, { state: { customDemo: customConfig } });
       } else {
-        // Create new demo
-        const templateId = `custom-${Date.now()}`;
-        const envId = generateEnvId(user.sub, templateId);
+        // Create new demo — always use "generic-agent" as the base template
+        const templateId = "generic-agent";
+        const envId = generateEnvId(user.sub, `custom-${Date.now()}`);
 
         const { error } = await supabase
           .from("demo_environments")
