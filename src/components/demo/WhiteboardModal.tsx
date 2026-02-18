@@ -304,60 +304,74 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   }
 
   // ─── Save as PNG ──────────────────────────────────────────────────────────
-  // We cannot use drawImage(diagramCanvas) because loading an SVG via a blob URL
-  // taints that canvas, causing a SecurityError on toBlob/toDataURL.
-  // Instead we re-render the SVG string directly into the export canvas ourselves.
   function saveAsPng() {
     const aCanvas = annotationCanvasRef.current;
     if (!aCanvas) return;
 
-    const { w, h } = canvasSize.current;
+    // Use actual canvas element dimensions as fallback in case canvasSize ref is stale
+    const w = canvasSize.current.w || aCanvas.width;
+    const h = canvasSize.current.h || aCanvas.height;
+    if (!w || !h) { console.error("[saveAsPng] canvas size is 0"); return; }
+
     const merged = document.createElement("canvas");
     merged.width = w;
     merged.height = h;
     const ctx = merged.getContext("2d")!;
 
-    // 1. Fill background
+    // Fill background colour
     ctx.fillStyle = bgRef.current;
     ctx.fillRect(0, 0, w, h);
 
     const svgStr = svgStoreRef.current[allDiagramsRef.current[selectedDiagramIdxRef.current]?.id ?? ""];
 
-    function compositeAnnotationsAndDownload() {
-      // 2. Draw annotation layer (user strokes) on top
-      ctx.drawImage(aCanvas!, 0, 0);
+    function finishAndDownload() {
+      try { ctx.drawImage(aCanvas!, 0, 0); } catch (_) { /* annotation canvas may be empty */ }
 
       merged.toBlob((blob) => {
         if (!blob) { console.error("[saveAsPng] toBlob returned null"); return; }
-        const url = URL.createObjectURL(blob);
+        const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = url;
+        a.style.display = "none";
+        a.href = blobUrl;
         a.download = `whiteboard-${new Date().toISOString().slice(0, 10)}.png`;
         document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        // Small delay before cleanup to let the browser register the click
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        }, 500);
       }, "image/png");
     }
 
     if (svgStr) {
-      // Re-render SVG into a fresh Image — this is not tainted because we own the blob
-      const blob = new Blob([svgStr], { type: "image/svg+xml" });
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = () => {
-        const padding = Math.min(w, h) * 0.05;
-        const scale = Math.min((w - padding * 2) / img.width, (h - padding * 2) / img.height);
-        const drawW = img.width * scale;
-        const drawH = img.height * scale;
-        ctx.drawImage(img, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
-        URL.revokeObjectURL(url);
-        compositeAnnotationsAndDownload();
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); compositeAnnotationsAndDownload(); };
-      img.src = url;
+      // Encode to base64 — blob URLs can taint canvases in some browsers.
+      // Use TextEncoder → Uint8Array → base64 to safely handle Unicode in SVG.
+      try {
+        const bytes = new TextEncoder().encode(svgStr);
+        let binary = "";
+        bytes.forEach((b) => (binary += String.fromCharCode(b)));
+        const b64 = `data:image/svg+xml;base64,${btoa(binary)}`;
+        const img = new Image();
+        img.onload = () => {
+          const padding = Math.min(w, h) * 0.05;
+          const scale = Math.min((w - padding * 2) / img.width, (h - padding * 2) / img.height);
+          const drawW = img.width * scale;
+          const drawH = img.height * scale;
+          ctx.drawImage(img, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
+          finishAndDownload();
+        };
+        img.onerror = (e) => {
+          console.error("[saveAsPng] SVG img load failed", e);
+          finishAndDownload();
+        };
+        img.src = b64;
+      } catch (encErr) {
+        console.error("[saveAsPng] base64 encode failed", encErr);
+        finishAndDownload();
+      }
     } else {
-      compositeAnnotationsAndDownload();
+      finishAndDownload();
     }
   }
 
