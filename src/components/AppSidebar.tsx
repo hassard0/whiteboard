@@ -10,16 +10,23 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { LayoutGrid, BookOpen } from "lucide-react";
+import { LayoutGrid, BookOpen, ShieldAlert } from "lucide-react";
 import auth0Shield from "@/assets/auth0-shield.svg";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 
-const navItems = [
+const baseNavItems = [
   { title: "Demos", url: "/", icon: LayoutGrid },
   { title: "Concepts", url: "/concepts", icon: BookOpen },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
+  const { isAdmin } = useIsAdmin();
+
+  const navItems = [
+    ...baseNavItems,
+    ...(isAdmin ? [{ title: "Admin", url: "/admin", icon: ShieldAlert }] : []),
+  ];
 
   return (
     <Sidebar className="border-r border-border/50" collapsible="icon">

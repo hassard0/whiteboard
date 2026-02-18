@@ -10,6 +10,7 @@ import DemoPage from "./pages/Demo";
 import BuilderPage from "./pages/Builder";
 import WizardPage from "./pages/Wizard";
 import ConceptsPage from "./pages/Concepts";
+import AdminPage from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -59,6 +60,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <WizardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminPage />
                 </ProtectedRoute>
               }
             />
