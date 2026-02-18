@@ -84,7 +84,7 @@ Please write a complete demo script that includes:
 Make this script detailed enough that a new SE could pick it up and run the demo confidently. Keep each talking point concise but impactful. Total length should be 800-1200 words.`;
 
     // Call AI via Lovable AI proxy
-    const aiResponse = await fetch("https://proxy.lovable.dev/openai/v1/chat/completions", {
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
