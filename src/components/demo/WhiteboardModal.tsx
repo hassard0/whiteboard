@@ -96,6 +96,8 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   const highlightSnapshot = useRef<ImageData | null>(null);
   const highlightPoints = useRef<{ x: number; y: number }[]>([]);
   const renderingRef = useRef<Set<string>>(new Set());
+  // Track drawing state in a ref to avoid stale closures in effects
+  const isDrawingRef = useRef(false);
 
   // ─── Escape key ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -135,7 +137,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
           }, 2500);
         });
     }
-    // Stagger slightly so we don't hammer the queue with all 11 diagrams at once.
+    // Stagger slightly so we don't hammer the queue with all diagrams at once.
     // Skip any diagram already seeded into svgStore (from cache or props).
     let delay = 0;
     diagrams.forEach((d) => {
@@ -148,7 +150,23 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ─── Refs that allow drawDiagram to be stable (no deps) ──────────────────
+  // drawDiagram reads everything from refs so it never needs to be recreated,
+  // which prevents it from being called by useEffect on every render/draw stroke.
+  const svgStoreRef = useRef(svgStore);
+  const allDiagramsRef = useRef(allDiagrams);
+  const selectedDiagramIdxRef = useRef(selectedDiagramIdx);
+  const bgRef = useRef(bg);
+
+  useEffect(() => { svgStoreRef.current = svgStore; }, [svgStore]);
+  useEffect(() => { allDiagramsRef.current = allDiagrams; }, [allDiagrams]);
+  useEffect(() => { selectedDiagramIdxRef.current = selectedDiagramIdx; }, [selectedDiagramIdx]);
+  useEffect(() => { bgRef.current = bg; }, [bg]);
+
   // ─── Draw diagram onto the bottom (diagram) canvas ───────────────────────
+  const drawGenRef = useRef(0);
+
+  // Stable callback — no deps, always reads latest values from refs.
   const drawDiagram = useCallback(() => {
     const canvas = diagramCanvasRef.current;
     if (!canvas) return;
@@ -156,18 +174,23 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     if (!ctx) return;
 
     const { w, h } = canvasSize.current;
-    ctx.clearRect(0, 0, w, h);
+    const currentBg = bgRef.current;
+    const svgStr = svgStoreRef.current[allDiagramsRef.current[selectedDiagramIdxRef.current]?.id ?? ""];
 
-    ctx.fillStyle = bg;
+    // Bump generation counter — stale async renders will be discarded
+    const gen = ++drawGenRef.current;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = currentBg;
     ctx.fillRect(0, 0, w, h);
 
-    const svgStr = svgStore[allDiagrams[selectedDiagramIdx]?.id ?? ""];
     if (!svgStr) return;
 
     const blob = new Blob([svgStr], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
+      if (gen !== drawGenRef.current) { URL.revokeObjectURL(url); return; }
       const padding = Math.min(w, h) * 0.05;
       const maxW = w - padding * 2;
       const maxH = h - padding * 2;
@@ -176,14 +199,19 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       const drawH = img.height * scale;
       const x = (w - drawW) / 2;
       const y = (h - drawH) / 2;
+      // Final clear+fill+draw so we don't get half-painted frames
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = currentBg;
+      ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, x, y, drawW, drawH);
       URL.revokeObjectURL(url);
     };
     img.onerror = () => URL.revokeObjectURL(url);
     img.src = url;
-  }, [allDiagrams, selectedDiagramIdx, bg, svgStore]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — all state read through refs
 
-  // ─── Initialise / resize canvases ────────────────────────────────────────
+  // ─── Initialise canvases once on mount ────────────────────────────────────
   useEffect(() => {
     const container = containerRef.current;
     const dCanvas = diagramCanvasRef.current;
@@ -201,15 +229,16 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     aCanvas.height = h;
 
     drawDiagram();
-  }, [drawDiagram]);
-
-  useEffect(() => { drawDiagram(); }, [drawDiagram]);
-
-  useEffect(() => {
-    const currentId = allDiagrams[selectedDiagramIdx]?.id;
-    if (currentId && svgStore[currentId]) drawDiagram();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [svgStore, selectedDiagramIdx]);
+  }, []); // run once
+
+  // ─── Redraw when diagram selection, svgStore, or bg changes ──────────────
+  // Guard against redrawing mid-stroke (would wipe the background visually)
+  useEffect(() => {
+    if (!isDrawingRef.current) {
+      drawDiagram();
+    }
+  }, [svgStore, selectedDiagramIdx, bg, drawDiagram]);
 
   // ─── Scroll to zoom ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -247,8 +276,8 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       setCustomDiagrams((prev) => [...prev, newDiagram]);
       setSvgStore((prev) => ({ ...prev, [id]: svg }));
 
-      // Switch to it
-      const newIdx = allDiagrams.length; // will be appended
+      // Switch to the new diagram
+      const newIdx = allDiagrams.length;
       setSelectedDiagramIdx(newIdx);
       setPan({ x: 0, y: 0 });
       setZoom(1);
@@ -305,6 +334,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       if (ctx) highlightSnapshot.current = ctx.getImageData(0, 0, canvasSize.current.w, canvasSize.current.h);
       highlightPoints.current = [pos];
     }
+    isDrawingRef.current = true;
     setIsDrawing(true);
     lastPos.current = pos;
     annotationCanvasRef.current?.setPointerCapture(e.pointerId);
@@ -318,7 +348,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
       panStart.current = { x: e.clientX, y: e.clientY };
       return;
     }
-    if (!isDrawing || !lastPos.current) return;
+    if (!isDrawingRef.current || !lastPos.current) return;
     const canvas = annotationCanvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx || !canvas) return;
@@ -365,6 +395,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     if (isPanning.current) { isPanning.current = false; panStart.current = null; return; }
     highlightSnapshot.current = null;
     highlightPoints.current = [];
+    isDrawingRef.current = false;
     setIsDrawing(false);
     lastPos.current = null;
     const ctx = annotationCanvasRef.current?.getContext("2d");
@@ -422,45 +453,46 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
                   <button
                     onClick={() => { setSelectedDiagramIdx(-1); setShowDiagramPicker(false); setPan({ x: 0, y: 0 }); setZoom(1); }}
                     className={cn(
-                      "flex w-full items-center px-3 py-2 text-xs text-left hover:bg-accent transition-colors text-muted-foreground italic",
-                      selectedDiagramIdx === -1 && "text-primary font-semibold"
+                      "w-full text-left px-3 py-2 text-xs transition-colors hover:bg-accent",
+                      selectedDiagramIdx === -1 ? "text-primary font-medium" : "text-foreground"
                     )}
                   >
-                    — None —
+                    — No diagram (blank canvas)
                   </button>
-                  <div className="my-1 border-t border-border/40" />
+                  {diagrams.length > 0 && (
+                    <div className="px-3 py-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wide border-t border-border/40 mt-1 pt-2">
+                      Demo Flows
+                    </div>
+                  )}
                   {diagrams.map((d, i) => (
                     <button
                       key={d.id}
-                      onClick={() => { setSelectedDiagramIdx(i); setShowDiagramPicker(false); setPan({ x: 0, y: 0 }); setZoom(1); }}
+                      onClick={() => { setSelectedDiagramIdx(i); setShowDiagramPicker(false); setPan({ x: 0, y: 0 }); setZoom(1); clearCanvas(); }}
                       className={cn(
-                        "flex w-full items-center px-3 py-2 text-xs text-left hover:bg-accent transition-colors",
-                        i === selectedDiagramIdx && "text-primary font-semibold"
+                        "w-full text-left px-3 py-2 text-xs transition-colors hover:bg-accent flex items-center gap-2",
+                        selectedDiagramIdx === i ? "text-primary font-medium" : "text-foreground"
                       )}
                     >
-                      {d.name}
+                      <span className="flex-1 truncate">{d.name}</span>
+                      {!svgStore[d.id] && <span className="text-[9px] text-muted-foreground shrink-0">rendering…</span>}
                     </button>
                   ))}
                   {customDiagrams.length > 0 && (
                     <>
-                      <div className="my-1 border-t border-border/40" />
-                      <p className="px-3 py-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Generated</p>
+                      <div className="px-3 py-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wide border-t border-border/40 mt-1 pt-2">
+                        Generated
+                      </div>
                       {customDiagrams.map((d, i) => (
                         <button
                           key={d.id}
-                          onClick={() => {
-                            setSelectedDiagramIdx(diagrams.length + i);
-                            setShowDiagramPicker(false);
-                            setPan({ x: 0, y: 0 });
-                            setZoom(1);
-                          }}
+                          onClick={() => { setSelectedDiagramIdx(diagrams.length + i); setShowDiagramPicker(false); setPan({ x: 0, y: 0 }); setZoom(1); clearCanvas(); }}
                           className={cn(
-                            "flex w-full items-center gap-2 px-3 py-2 text-xs text-left hover:bg-accent transition-colors",
-                            selectedDiagramIdx === diagrams.length + i && "text-primary font-semibold"
+                            "w-full text-left px-3 py-2 text-xs transition-colors hover:bg-accent flex items-center gap-2",
+                            selectedDiagramIdx === diagrams.length + i ? "text-primary font-medium" : "text-foreground"
                           )}
                         >
-                          <Sparkles className="h-3 w-3 text-primary/70 shrink-0" />
-                          <span className="truncate">{d.name}</span>
+                          <Sparkles className="h-3 w-3 text-primary shrink-0" />
+                          <span className="flex-1 truncate">{d.name}</span>
                         </button>
                       ))}
                     </>
@@ -469,53 +501,48 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
               )}
             </div>
 
-            <div className="h-5 w-px bg-border/60" />
-
-            {/* Tools */}
+            {/* Tool selector */}
             <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-background p-0.5">
-              {toolButtons.map((t) => (
+              {toolButtons.map((btn) => (
                 <button
-                  key={t.id}
-                  title={t.label}
-                  onClick={() => setTool(t.id)}
+                  key={btn.id}
+                  title={btn.label}
+                  onClick={() => setTool(btn.id)}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors",
-                    tool === t.id
+                    "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
+                    tool === btn.id
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent"
                   )}
                 >
-                  {t.icon}
-                  <span className="hidden sm:inline">{t.label}</span>
+                  {btn.icon}
+                  <span className="hidden sm:inline">{btn.label}</span>
                 </button>
               ))}
             </div>
 
             {/* Stroke width */}
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground">Size</span>
-              <div className="flex items-center gap-1">
-                {[2, 4, 7, 12].map((w) => (
-                  <button
-                    key={w}
-                    onClick={() => setStrokeWidth(w)}
-                    className={cn(
-                      "flex items-center justify-center rounded-full border transition-colors",
-                      strokeWidth === w ? "border-primary" : "border-border/60 hover:border-border"
-                    )}
-                    style={{ width: w + 10, height: w + 10 }}
-                  >
-                    <div
-                      className="rounded-full"
-                      style={{
-                        width: w,
-                        height: w,
-                        backgroundColor: strokeWidth === w ? color : "hsl(var(--muted-foreground))",
-                      }}
-                    />
-                  </button>
-                ))}
-              </div>
+            <div className="flex items-center gap-1">
+              {[2, 4, 7].map((w) => (
+                <button
+                  key={w}
+                  onClick={() => setStrokeWidth(w)}
+                  className={cn(
+                    "flex items-center justify-center rounded-full border transition-colors",
+                    strokeWidth === w ? "border-primary" : "border-border/60 hover:border-border"
+                  )}
+                  style={{ width: w + 10, height: w + 10 }}
+                >
+                  <div
+                    className="rounded-full"
+                    style={{
+                      width: w,
+                      height: w,
+                      backgroundColor: strokeWidth === w ? color : "hsl(var(--muted-foreground))",
+                    }}
+                  />
+                </button>
+              ))}
             </div>
 
             {/* Colour picker */}
@@ -660,35 +687,36 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
               </div>
             )}
 
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div
-                style={{
-                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                  transformOrigin: "center center",
-                  width: "100%",
-                  height: "100%",
-                  position: "relative",
-                }}
-              >
-                {/* Bottom: diagram + background — z-index 1 */}
-                <canvas ref={diagramCanvasRef} className="absolute inset-0 w-full h-full" style={{ zIndex: 1 }} />
-                {/* Top: annotation layer — z-index 2, always above diagram */}
-                <canvas
-                  ref={annotationCanvasRef}
-                  className={cn(
-                    "absolute inset-0 w-full h-full",
-                    tool === "draw" && "cursor-crosshair",
-                    tool === "highlight" && "cursor-cell",
-                    tool === "erase" && "cursor-cell",
-                  )}
-                  onContextMenu={(e) => e.preventDefault()}
-                  onPointerDown={onPointerDown}
-                  onPointerMove={onPointerMove}
-                  onPointerUp={onPointerUp}
-                  onPointerLeave={onPointerUp}
-                  style={{ zIndex: 2, cursor: isPanning.current ? "grabbing" : undefined }}
-                />
-              </div>
+            {/* Zoom/pan wrapper — CSS transform only, never causes canvas redraw */}
+            <div
+              className="absolute inset-0"
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: "center center",
+              }}
+            >
+              {/* Bottom canvas: diagram + background — pointer-events none so drawing goes to annotation layer */}
+              <canvas
+                ref={diagramCanvasRef}
+                className="absolute inset-0 w-full h-full"
+                style={{ zIndex: 1, pointerEvents: "none" }}
+              />
+              {/* Top canvas: annotation layer — receives all pointer events */}
+              <canvas
+                ref={annotationCanvasRef}
+                className={cn(
+                  "absolute inset-0 w-full h-full",
+                  tool === "draw" && "cursor-crosshair",
+                  tool === "highlight" && "cursor-cell",
+                  tool === "erase" && "cursor-cell",
+                )}
+                onContextMenu={(e) => e.preventDefault()}
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                onPointerLeave={onPointerUp}
+                style={{ zIndex: 2, cursor: isPanning.current ? "grabbing" : undefined }}
+              />
             </div>
           </div>
         </motion.div>
