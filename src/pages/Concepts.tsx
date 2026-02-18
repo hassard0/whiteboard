@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import mermaid from "mermaid";
@@ -421,11 +421,15 @@ export default function Concepts() {
   const [modalDiagram, setModalDiagram] = useState<{ diagram: string; title: string } | null>(null);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
 
-  // Build diagram list for whiteboard — pass svg from cache if available, always pass source diagram text
-  const buildWhiteboardDiagrams = () => [
-    ...CONCEPTS.map((c) => ({ id: c.id, name: c.name, svg: renderedSvgCache[c.id] ?? "", diagram: c.diagram })),
-    ...DEMO_FLOWS.map((d) => ({ id: d.id, name: d.name, svg: renderedSvgCache[d.id] ?? "", diagram: d.diagram })),
-  ];
+  // Stable diagram list — re-compute only when whiteboard opens so the cache is fresh
+  const whiteboardDiagrams = useMemo(
+    () => [
+      ...CONCEPTS.map((c) => ({ id: c.id, name: c.name, svg: renderedSvgCache[c.id] ?? "", diagram: c.diagram })),
+      ...DEMO_FLOWS.map((d) => ({ id: d.id, name: d.name, svg: renderedSvgCache[d.id] ?? "", diagram: d.diagram })),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [whiteboardOpen] // re-seed cache hits when modal opens
+  );
 
   return (
     <DashboardLayout>
@@ -676,7 +680,7 @@ export default function Concepts() {
       {/* Whiteboard modal */}
       {whiteboardOpen && (
         <WhiteboardModal
-          diagrams={buildWhiteboardDiagrams()}
+          diagrams={whiteboardDiagrams}
           onClose={() => setWhiteboardOpen(false)}
         />
       )}
