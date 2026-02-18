@@ -72,14 +72,22 @@ export function renderMermaid(diagramText: string): Promise<string> {
   return new Promise((resolve, reject) => {
     queue.push(async () => {
       const id = `mermaid-q-${++counter}`;
-      // Clean up any leftover DOM node with this id before rendering
-      document.getElementById(id)?.remove();
+
+      // Mermaid v11 needs a real DOM element attached to the body for some diagram types.
+      // Create a hidden off-screen container, render into it, then remove it.
+      const container = document.createElement("div");
+      container.id = id;
+      container.style.cssText = "position:absolute;top:-9999px;left:-9999px;visibility:hidden;";
+      document.body.appendChild(container);
+
       try {
-        const { svg } = await mermaid.render(id, diagramText);
+        const { svg } = await mermaid.render(id, diagramText, container);
         resolve(svg);
       } catch (err) {
         reject(err);
       } finally {
+        container.remove();
+        // Also clean up any detached SVG mermaid may have left in the body
         document.getElementById(id)?.remove();
       }
     });
