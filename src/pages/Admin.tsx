@@ -45,13 +45,21 @@ interface Auth0User {
   blocked?: boolean;
 }
 
+const AUTH0_DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN || "";
+
 async function callAdminApi(
-  getAccessToken: () => Promise<string>,
+  getAccessToken: (opts?: object) => Promise<string>,
   method: string,
   action: string,
   body?: object
 ) {
-  const token = await getAccessToken();
+  // Request with audience so Auth0 returns a real JWT (not an opaque token)
+  // The sub claim in this JWT is used server-side to verify admin role
+  const token = await getAccessToken({
+    authorizationParams: {
+      audience: `https://${AUTH0_DOMAIN}/api/v2/`,
+    },
+  });
   const url = `${SUPABASE_URL}/functions/v1/admin-users?action=${action}`;
   const res = await fetch(url, {
     method,
