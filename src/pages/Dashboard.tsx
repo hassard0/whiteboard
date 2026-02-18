@@ -1,7 +1,8 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { DEMO_TEMPLATES } from "@/lib/demo-templates";
+import { generateEnvId } from "@/lib/demo-templates";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth0ProfileSync } from "@/hooks/use-auth0-profile-sync";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -10,6 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Plane, Briefcase, ShoppingBag, Code, Wrench, Plus, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
+import { AIMagicModal } from "@/components/demo/AIMagicModal";
+import { toast } from "sonner";
 
 const iconMap: Record<string, React.ElementType> = {
   Plane, Briefcase, ShoppingBag, Code, Wrench,
@@ -21,17 +24,40 @@ export default function Dashboard() {
   useAuth0ProfileSync();
 
   const [customDemos, setCustomDemos] = useState<any[]>([]);
-  useEffect(() => {
+  const [magicOpen, setMagicOpen] = useState(false);
+
+  const loadCustomDemos = useCallback(async () => {
     if (!user?.sub) return;
-    (async () => {
-      const { data } = await supabase
-        .from("demo_environments")
-        .select("*")
-        .eq("auth0_sub", user.sub)
-        .eq("env_type", "custom");
-      if (data) setCustomDemos(data);
-    })();
+    const { data } = await supabase
+      .from("demo_environments")
+      .select("*")
+      .eq("auth0_sub", user.sub)
+      .eq("env_type", "custom");
+    if (data) setCustomDemos(data);
   }, [user?.sub]);
+
+  useEffect(() => { loadCustomDemos(); }, [loadCustomDemos]);
+
+  const handleAIGenerated = async (config: any) => {
+    if (!user?.sub) return;
+    // Pick first available template as base, or generic
+    const baseTemplateId = "generic-agent";
+    const envId = generateEnvId(user.sub, `custom-${Date.now()}`);
+    try {
+      const { error } = await supabase.from("demo_environments").insert({
+        env_id: envId,
+        auth0_sub: user.sub,
+        template_id: baseTemplateId,
+        env_type: "custom",
+        config_overrides: config as any,
+      });
+      if (error) throw error;
+      toast.success(`"${config.name}" demo created!`);
+      loadCustomDemos();
+    } catch (e: any) {
+      toast.error("Failed to save demo: " + e.message);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -39,6 +65,12 @@ export default function Dashboard() {
       <div className="pointer-events-none absolute left-0 right-0 top-16 h-72 z-0" style={{
         background: "radial-gradient(ellipse at 50% 0%, hsl(262 80% 50% / 0.2) 0%, hsl(240 60% 45% / 0.1) 50%, transparent 80%)",
       }} />
+
+      <AIMagicModal
+        open={magicOpen}
+        onClose={() => setMagicOpen(false)}
+        onGenerated={handleAIGenerated}
+      />
 
       <main className="relative z-10 mx-auto max-w-7xl px-6 py-12">
         <div className="mb-10 flex items-end justify-between">
@@ -54,12 +86,29 @@ export default function Dashboard() {
               Choose a demo to experience Auth0-secured AI agents in action.
             </p>
           </div>
-          <Button
-            onClick={() => navigate("/wizard")}
-            className="rounded-full bg-foreground text-background hover:bg-foreground/90 px-6"
-          >
-            <Plus className="mr-1.5 h-4 w-4" /> Create Demo
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* AI Magic Button */}
+            <motion.button
+              onClick={() => setMagicOpen(true)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.97 }}
+              className="group relative flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 transition-all hover:bg-primary/20 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/20"
+              title="Generate demo with AI"
+            >
+              <motion.div
+                className="absolute inset-0 rounded-full bg-primary/10"
+                animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0, 0.4] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              />
+              <Sparkles className="h-4.5 w-4.5 text-primary relative z-10" />
+            </motion.button>
+            <Button
+              onClick={() => navigate("/wizard")}
+              className="rounded-full bg-foreground text-background hover:bg-foreground/90 px-6"
+            >
+              <Plus className="mr-1.5 h-4 w-4" /> Create Demo
+            </Button>
+          </div>
         </div>
 
         {/* Custom demos */}
@@ -85,8 +134,22 @@ export default function Dashboard() {
                       onClick={() => navigate(`/demo/${demo.template_id}`, { state: { customDemo: cfg } })}
                     >
                       <CardHeader>
-                        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: `${cfg.color || "hsl(262 83% 58%)"}15` }}>
-                          <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
+                        <div className="mb-3 flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl overflow-hidden" style={{ backgroundColor: `${cfg.color || "hsl(262 83% 58%)"}15` }}>
+                            {cfg.customerLogo ? (
+                              <img
+                                src={cfg.customerLogo}
+                                alt={cfg.customerName || cfg.name}
+                                className="h-8 w-8 object-contain"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                              />
+                            ) : (
+                              <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
+                            )}
+                          </div>
+                          {cfg.customerName && (
+                            <span className="text-xs text-muted-foreground font-medium">{cfg.customerName}</span>
+                          )}
                         </div>
                         <CardTitle className="text-lg">{cfg.name}</CardTitle>
                         <CardDescription>{cfg.description}</CardDescription>
