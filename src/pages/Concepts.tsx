@@ -5,10 +5,11 @@ import mermaid from "mermaid";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WhiteboardModal } from "@/components/demo/WhiteboardModal";
 import {
   Shield, Key, UserCheck, ArrowRightLeft, FileText, User,
   Plane, Briefcase, ShoppingBag, Code, Wrench,
-  Globe, Lock, Database, CheckCircle, GitBranch, X, Maximize2,
+  Globe, Lock, Database, CheckCircle, GitBranch, X, Maximize2, PenLine,
 } from "lucide-react";
 
 // ─── Mermaid init ───
@@ -53,23 +54,33 @@ mermaid.initialize({
 
 let mermaidIdCounter = 0;
 
-function MermaidDiagram({ diagram }: { diagram: string }) {
-  const [svg, setSvg] = useState<string>("");
+// Shared SVG cache so whiteboard can reuse rendered SVGs
+export const renderedSvgCache: Record<string, string> = {};
+
+function MermaidDiagram({ diagram, cacheKey }: { diagram: string; cacheKey?: string }) {
+  const [svg, setSvg] = useState<string>(cacheKey ? (renderedSvgCache[cacheKey] ?? "") : "");
   const [error, setError] = useState(false);
   const idRef = useRef(`mermaid-${++mermaidIdCounter}`);
 
   useEffect(() => {
+    if (cacheKey && renderedSvgCache[cacheKey]) {
+      setSvg(renderedSvgCache[cacheKey]);
+      return;
+    }
     let cancelled = false;
     mermaid
       .render(idRef.current, diagram)
       .then(({ svg: rendered }) => {
-        if (!cancelled) setSvg(rendered);
+        if (!cancelled) {
+          if (cacheKey) renderedSvgCache[cacheKey] = rendered;
+          setSvg(rendered);
+        }
       })
       .catch(() => {
         if (!cancelled) setError(true);
       });
     return () => { cancelled = true; };
-  }, [diagram]);
+  }, [diagram, cacheKey]);
 
   if (error) {
     return (
@@ -410,6 +421,13 @@ const DEMO_FLOWS = [
 export default function Concepts() {
   const [activeTab, setActiveTab] = useState("concepts");
   const [modalDiagram, setModalDiagram] = useState<{ diagram: string; title: string } | null>(null);
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
+
+  // Build diagram list for whiteboard from whichever tab is active
+  const whiteboardDiagrams = [
+    ...CONCEPTS.map((c) => ({ id: c.id, name: c.name, svg: renderedSvgCache[c.id] ?? "" })),
+    ...DEMO_FLOWS.map((d) => ({ id: d.id, name: d.name, svg: renderedSvgCache[d.id] ?? "" })),
+  ];
 
   return (
     <DashboardLayout>
@@ -433,10 +451,23 @@ export default function Concepts() {
           </motion.div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
-            <TabsList className="mb-8">
-              <TabsTrigger value="concepts">Core Concepts</TabsTrigger>
-              <TabsTrigger value="demos">Demo Flows</TabsTrigger>
-            </TabsList>
+            <div className="flex items-center gap-3 mb-8">
+              <TabsList>
+                <TabsTrigger value="concepts">Core Concepts</TabsTrigger>
+                <TabsTrigger value="demos">Demo Flows</TabsTrigger>
+              </TabsList>
+
+              {/* Whiteboard button */}
+              <motion.button
+                onClick={() => setWhiteboardOpen(true)}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.95 }}
+                title="Open Whiteboard"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground shadow-sm hover:border-primary/50 hover:text-primary hover:bg-primary/10 transition-colors"
+              >
+                <PenLine className="h-4 w-4" />
+              </motion.button>
+            </div>
 
             {/* ─── Core Concepts ─── */}
             <TabsContent value="concepts">
@@ -479,7 +510,7 @@ export default function Concepts() {
                               </div>
                               <Maximize2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
-                            <MermaidDiagram diagram={concept.diagram} />
+                            <MermaidDiagram diagram={concept.diagram} cacheKey={concept.id} />
                           </div>
 
                           {/* How it works steps */}
@@ -606,7 +637,7 @@ export default function Concepts() {
                             <span className="text-xs text-muted-foreground font-mono">Authorization Flow</span>
                           </div>
                           <div className="rounded-xl border border-border/40 bg-background/60 p-5">
-                            <MermaidDiagram diagram={demo.diagram} />
+                            <MermaidDiagram diagram={demo.diagram} cacheKey={demo.id} />
                           </div>
 
                           {/* Legend */}
@@ -641,6 +672,14 @@ export default function Concepts() {
           diagram={modalDiagram.diagram}
           title={modalDiagram.title}
           onClose={() => setModalDiagram(null)}
+        />
+      )}
+
+      {/* Whiteboard modal */}
+      {whiteboardOpen && (
+        <WhiteboardModal
+          diagrams={whiteboardDiagrams}
+          onClose={() => setWhiteboardOpen(false)}
         />
       )}
     </DashboardLayout>
