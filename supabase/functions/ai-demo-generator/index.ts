@@ -139,10 +139,36 @@ async function scrapeWithFirecrawl(url: string): Promise<{
       logoUrl = data.metadata.ogImage;
     }
 
-    // Fallback to Clearbit if no logo found
+    // Also check favicon links in HTML as a logo source
+    if (!logoUrl && data.html) {
+      const appleTouchMatch = data.html.match(/<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["']/i);
+      if (appleTouchMatch?.[1]) {
+        const href = appleTouchMatch[1];
+        const origin = new URL(normalized).origin;
+        logoUrl = href.startsWith("http") ? href : `${origin}${href.startsWith("/") ? "" : "/"}${href}`;
+      }
+    }
+
+    // Try Google favicon service as it's more reliable than Clearbit
     if (!logoUrl) {
       const domain = new URL(normalized).hostname.replace("www.", "");
+      // Try Clearbit first, but also store Google favicon as backup in the URL
       logoUrl = `https://logo.clearbit.com/${domain}`;
+    }
+
+    // Validate the logo URL is actually reachable (HEAD request, 3s timeout)
+    if (logoUrl) {
+      try {
+        const check = await fetch(logoUrl, { method: "HEAD", signal: AbortSignal.timeout(3000) });
+        if (!check.ok) {
+          const domain = new URL(normalized).hostname.replace("www.", "");
+          // Fall back to Google's favicon CDN which is highly reliable
+          logoUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+        }
+      } catch {
+        const domain = new URL(normalized).hostname.replace("www.", "");
+        logoUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+      }
     }
 
     // Extract company name from branding/metadata
@@ -199,7 +225,14 @@ async function fallbackScrape(url: string): Promise<{ logoUrl?: string; companyN
       const href = appleTouchMatch[1];
       logoUrl = href.startsWith("http") ? href : `${origin}${href.startsWith("/") ? "" : "/"}${href}`;
     } else {
-      logoUrl = `https://logo.clearbit.com/${domain}`;
+      // Try Clearbit, validate it, fall back to Google favicon
+      const clearbitUrl = `https://logo.clearbit.com/${domain}`;
+      try {
+        const check = await fetch(clearbitUrl, { method: "HEAD", signal: AbortSignal.timeout(3000) });
+        logoUrl = check.ok ? clearbitUrl : `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+      } catch {
+        logoUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+      }
     }
 
     // Context
