@@ -49,6 +49,17 @@ const queue: Array<() => Promise<void>> = [];
 let processing = false;
 let counter = 0;
 
+// Wrap a promise with a timeout so a hung render never blocks the queue.
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`mermaid render timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
 async function flush() {
   if (processing) return;
   processing = true;
@@ -67,9 +78,15 @@ export function renderMermaid(diagramText: string): Promise<string> {
   return new Promise((resolve, reject) => {
     queue.push(async () => {
       const id = `mermaid-q-${++counter}`;
+      // Clean up any leftover element from a previous attempt
       document.getElementById(id)?.remove();
+      // Create a hidden container so mermaid has a real DOM parent
+      const container = document.createElement("div");
+      container.id = `mermaid-container-${counter}`;
+      container.style.cssText = "position:fixed;top:-9999px;left:-9999px;visibility:hidden;";
+      document.body.appendChild(container);
       try {
-        const result = await mermaid.render(id, diagramText);
+        const result = await withTimeout(mermaid.render(id, diagramText), 15000);
         const svg = result?.svg ?? "";
         if (!svg) throw new Error("mermaid.render returned empty SVG");
         resolve(svg);
@@ -78,6 +95,7 @@ export function renderMermaid(diagramText: string): Promise<string> {
         reject(err);
       } finally {
         document.getElementById(id)?.remove();
+        container.remove();
       }
     });
     flush();
