@@ -423,10 +423,10 @@ export default function Concepts() {
   const [modalDiagram, setModalDiagram] = useState<{ diagram: string; title: string } | null>(null);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
 
-  // Build diagram list for whiteboard from whichever tab is active
-  const whiteboardDiagrams = [
-    ...CONCEPTS.map((c) => ({ id: c.id, name: c.name, svg: renderedSvgCache[c.id] ?? "" })),
-    ...DEMO_FLOWS.map((d) => ({ id: d.id, name: d.name, svg: renderedSvgCache[d.id] ?? "" })),
+  // Build diagram list for whiteboard — include source diagram text so modal can re-render if needed
+  const buildWhiteboardDiagrams = () => [
+    ...CONCEPTS.map((c) => ({ id: c.id, name: c.name, svg: renderedSvgCache[c.id] ?? "", diagram: c.diagram })),
+    ...DEMO_FLOWS.map((d) => ({ id: d.id, name: d.name, svg: renderedSvgCache[d.id] ?? "", diagram: d.diagram })),
   ];
 
   return (
@@ -678,7 +678,7 @@ export default function Concepts() {
       {/* Whiteboard modal */}
       {whiteboardOpen && (
         <WhiteboardModal
-          diagrams={whiteboardDiagrams}
+          diagrams={buildWhiteboardDiagrams()}
           onClose={() => setWhiteboardOpen(false)}
         />
       )}
