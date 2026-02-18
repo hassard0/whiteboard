@@ -42,11 +42,13 @@ async function verifyAdmin(authHeader: string | null): Promise<boolean> {
   if (!authHeader) return false;
   // Extract bearer token — this is the Auth0 access token from the frontend
   const token = authHeader.replace("Bearer ", "");
-  
-  // Decode JWT to get sub (we don't need to verify signature since we trust Supabase's JWT validation)
+
+  // Decode JWT to get sub — add padding to make valid base64
   try {
     const [, payloadB64] = token.split(".");
-    const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
+    const base64 = payloadB64.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded));
     const auth0Sub = payload.sub;
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
