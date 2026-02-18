@@ -304,26 +304,28 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   }
 
   // ─── Save as PNG ──────────────────────────────────────────────────────────
+  // We cannot use drawImage(diagramCanvas) because loading an SVG via a blob URL
+  // taints that canvas, causing a SecurityError on toBlob/toDataURL.
+  // Instead we re-render the SVG string directly into the export canvas ourselves.
   function saveAsPng() {
-    const dCanvas = diagramCanvasRef.current;
     const aCanvas = annotationCanvasRef.current;
-    if (!dCanvas || !aCanvas) return;
+    if (!aCanvas) return;
 
-    try {
-      // Re-draw diagram directly onto a fresh canvas to avoid tainted-canvas issues
-      // from SVG blob URLs by using the current diagram canvas pixels directly.
-      const merged = document.createElement("canvas");
-      merged.width = dCanvas.width;
-      merged.height = dCanvas.height;
-      const ctx = merged.getContext("2d")!;
+    const { w, h } = canvasSize.current;
+    const merged = document.createElement("canvas");
+    merged.width = w;
+    merged.height = h;
+    const ctx = merged.getContext("2d")!;
 
-      // Draw background fill first
-      ctx.fillStyle = bgRef.current;
-      ctx.fillRect(0, 0, merged.width, merged.height);
+    // 1. Fill background
+    ctx.fillStyle = bgRef.current;
+    ctx.fillRect(0, 0, w, h);
 
-      // Composite diagram layer then annotation layer
-      ctx.drawImage(dCanvas, 0, 0);
-      ctx.drawImage(aCanvas, 0, 0);
+    const svgStr = svgStoreRef.current[allDiagramsRef.current[selectedDiagramIdxRef.current]?.id ?? ""];
+
+    function compositeAnnotationsAndDownload() {
+      // 2. Draw annotation layer (user strokes) on top
+      ctx.drawImage(aCanvas!, 0, 0);
 
       merged.toBlob((blob) => {
         if (!blob) { console.error("[saveAsPng] toBlob returned null"); return; }
@@ -336,8 +338,26 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }, "image/png");
-    } catch (err) {
-      console.error("[saveAsPng] failed:", err);
+    }
+
+    if (svgStr) {
+      // Re-render SVG into a fresh Image — this is not tainted because we own the blob
+      const blob = new Blob([svgStr], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const padding = Math.min(w, h) * 0.05;
+        const scale = Math.min((w - padding * 2) / img.width, (h - padding * 2) / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        ctx.drawImage(img, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
+        URL.revokeObjectURL(url);
+        compositeAnnotationsAndDownload();
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); compositeAnnotationsAndDownload(); };
+      img.src = url;
+    } else {
+      compositeAnnotationsAndDownload();
     }
   }
 
