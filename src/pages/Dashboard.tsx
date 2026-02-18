@@ -51,11 +51,15 @@ export default function Dashboard() {
         env_type: "custom",
         config_overrides: config as any,
       });
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase insert error:", error);
+        throw error;
+      }
       toast.success(`"${config.name}" demo created!`);
-      loadCustomDemos();
+      await loadCustomDemos();
     } catch (e: any) {
-      toast.error("Failed to save demo: " + e.message);
+      console.error("handleAIGenerated error:", e);
+      toast.error("Failed to save demo: " + (e.message || e.details || JSON.stringify(e)));
     }
   };
 
