@@ -10,6 +10,7 @@ interface DiagramOption {
   id: string;
   name: string;
   svg: string;
+  diagram?: string;
 }
 
 interface WhiteboardModalProps {
@@ -89,12 +90,12 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   useEffect(() => {
     diagrams.forEach((d) => {
       if (svgStore[d.id]) return;
-      const diagramText = (d as any).diagram as string | undefined;
+      const diagramText = d.diagram;
       if (!diagramText) return;
       const id = `wb-mermaid-${++wbMermaidCounter}`;
       mermaid.render(id, diagramText).then(({ svg }) => {
         setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
-      }).catch(() => {});
+      }).catch(console.error);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -161,6 +162,14 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   useEffect(() => {
     drawDiagram();
   }, [drawDiagram]);
+
+  // Also explicitly redraw when the selected diagram's SVG becomes available
+  useEffect(() => {
+    const currentId = diagrams[selectedDiagramIdx]?.id;
+    if (currentId && svgStore[currentId]) {
+      drawDiagram();
+    }
+  }, [svgStore, selectedDiagramIdx, diagrams, drawDiagram]);
 
   // ─── Scroll to zoom (centered on cursor) ─────────────────────────────────
   useEffect(() => {
