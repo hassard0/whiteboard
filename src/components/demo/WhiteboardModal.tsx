@@ -86,17 +86,29 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // ─── Pre-render all diagrams via Mermaid ─────────────────────────────────
+  // ─── Pre-render all diagrams via Mermaid (sequentially to avoid conflicts) ──
   useEffect(() => {
-    diagrams.forEach((d) => {
-      if (svgStore[d.id]) return;
-      const diagramText = d.diagram;
-      if (!diagramText) return;
+    const toRender = diagrams.filter((d) => !svgStore[d.id] && d.diagram);
+    if (toRender.length === 0) return;
+
+    let cancelled = false;
+    const renderNext = async (idx: number) => {
+      if (cancelled || idx >= toRender.length) return;
+      const d = toRender[idx];
+      const diagramText = d.diagram!;
       const id = `wb-mermaid-${++wbMermaidCounter}`;
-      mermaid.render(id, diagramText).then(({ svg }) => {
-        setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
-      }).catch(console.error);
-    });
+      try {
+        const { svg } = await mermaid.render(id, diagramText);
+        if (!cancelled) {
+          setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
+        }
+      } catch (err) {
+        console.error(`WhiteboardModal: failed to render diagram "${d.name}"`, err);
+      }
+      renderNext(idx + 1);
+    };
+    renderNext(0);
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
