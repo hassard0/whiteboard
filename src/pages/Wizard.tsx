@@ -124,16 +124,21 @@ export default function WizardPage() {
             id: t.id,
             name: t.name,
             description: t.description,
-            industry: t.industry || "generic",
+            industry: t.industry || "custom",
             requiresApproval: t.requiresApproval ?? false,
             scopes: t.scopes || [],
             inputSchema: t.inputSchema || {},
           }));
 
+          // Ensure industry is a valid preset — fall back to "custom"
+          const storedIndustry = cfg.industry || "";
+          const validPresetIds = INDUSTRY_PRESETS.map((p) => p.id);
+          const resolvedIndustry = validPresetIds.includes(storedIndustry) ? storedIndustry : "custom";
+
           setState({
             name: cfg.name || "",
             description: cfg.description || "",
-            industry: cfg.industry || "",
+            industry: resolvedIndustry,
             color: cfg.color || "hsl(262 83% 58%)",
             icon: cfg.icon || "Sparkles",
             selectedTools: allTools,
@@ -224,7 +229,7 @@ export default function WizardPage() {
 
   // ─── Navigation ───
   const canAdvance = () => {
-    if (step === 0) return state.name.trim() && state.industry;
+    if (step === 0) return state.name.trim() && (state.industry || !!editingDemo);
     if (step === 1) return state.selectedTools.length > 0 || state.customTools.length > 0;
     if (step === 2) return state.selectedFeatures.length > 0;
     if (step === 3) return state.systemPrompt.trim();
@@ -702,6 +707,29 @@ export default function WizardPage() {
                   <p className="text-sm text-muted-foreground mt-1">Everything looks good? Save and launch your custom demo.</p>
                 </div>
 
+                {/* Visibility toggle — prominent at the top */}
+                <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${state.isPublic ? "bg-primary/10" : "bg-secondary"}`}>
+                      <Shield className={`h-4 w-4 ${state.isPublic ? "text-primary" : "text-muted-foreground"}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {state.isPublic ? "Public demo" : "Private demo"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {state.isPublic
+                          ? "Visible to all users on the dashboard"
+                          : "Only visible to you"}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={state.isPublic}
+                    onCheckedChange={(v) => update("isPublic", v)}
+                  />
+                </div>
+
                 <div className="grid gap-4 md:grid-cols-2">
                   <Card>
                     <CardContent className="p-4 space-y-3">
@@ -740,17 +768,8 @@ export default function WizardPage() {
                   </Card>
                 </div>
 
-                {/* Visibility toggle */}
-                <div className="flex items-center justify-between rounded-lg border border-border p-4">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Make this demo public</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Public demos are visible to all users on the dashboard. Private demos are only visible to you.</p>
-                  </div>
-                  <Switch
-                    checked={state.isPublic}
-                    onCheckedChange={(v) => update("isPublic", v)}
-                  />
-                </div>
+
+
 
                 <Button
                   size="lg"
