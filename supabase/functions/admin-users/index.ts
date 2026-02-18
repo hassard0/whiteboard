@@ -30,6 +30,7 @@ async function getMgmtToken(): Promise<string> {
 
   if (!res.ok) {
     const err = await res.text();
+    console.error("Failed to get management token:", err);
     throw new Error(`Failed to get management token: ${err}`);
   }
 
@@ -38,37 +39,56 @@ async function getMgmtToken(): Promise<string> {
   return cachedToken.token;
 }
 
-async function verifyAdmin(authHeader: string | null): Promise<boolean> {
-  if (!authHeader) return false;
-  // Extract bearer token — this is the Auth0 access token from the frontend
+async function verifyAdmin(authHeader: string | null): Promise<{ ok: boolean; sub?: string }> {
+  if (!authHeader) {
+    console.log("verifyAdmin: no auth header");
+    return { ok: false };
+  }
+
   const token = authHeader.replace("Bearer ", "");
 
-  // Decode JWT to get sub — add padding to make valid base64
+  // Decode JWT payload — works for both Auth0 RS256 JWTs and regular JWTs
   try {
-    const [, payloadB64] = token.split(".");
-    const base64 = payloadB64.replace(/-/g, "+").replace(/_/g, "/");
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      console.log("verifyAdmin: token is not a JWT (opaque token?) - parts:", parts.length);
+      return { ok: false };
+    }
+
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
     const payload = JSON.parse(atob(padded));
     const auth0Sub = payload.sub;
 
+    console.log("verifyAdmin: decoded sub =", auth0Sub);
+
+    if (!auth0Sub) {
+      console.log("verifyAdmin: no sub in token payload");
+      return { ok: false };
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("user_roles")
       .select("role")
       .eq("auth0_sub", auth0Sub)
       .eq("role", "admin")
-      .single();
+      .maybeSingle();
 
-    return !!data;
-  } catch {
-    return false;
+    if (error) console.error("verifyAdmin: db error", error);
+    console.log("verifyAdmin: role lookup result =", data);
+
+    return { ok: !!data, sub: auth0Sub };
+  } catch (e) {
+    console.error("verifyAdmin: exception", e);
+    return { ok: false };
   }
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const isAdmin = await verifyAdmin(req.headers.get("Authorization"));
+  const { ok: isAdmin } = await verifyAdmin(req.headers.get("Authorization"));
   if (!isAdmin) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 403,
@@ -92,6 +112,7 @@ serve(async (req) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Management API error listing users");
       return new Response(JSON.stringify(data), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -118,10 +139,9 @@ serve(async (req) => {
       });
     }
 
-    // ── INVITE USER (password reset / invitation email) ──
+    // ── INVITE USER ──
     if (req.method === "POST" && action === "invite") {
       const body = await req.json();
-      // Create user first
       const createRes = await fetch(`${mgmtBase}/users`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -136,15 +156,12 @@ serve(async (req) => {
       const createdUser = await createRes.json();
       if (!createRes.ok) throw new Error(createdUser.message || "Failed to create user for invite");
 
-      // Trigger a password reset (acts as invite email)
       const ticketRes = await fetch(`${mgmtBase}/tickets/password-change`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: createdUser.user_id,
-          result_url: `${url.origin}`,
           mark_email_as_verified: true,
-          includeEmailInRedirect: false,
         }),
       });
       const ticketData = await ticketRes.json();
@@ -193,6 +210,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
+    console.error("admin-users error:", err.message);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
