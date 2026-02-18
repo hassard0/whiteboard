@@ -309,18 +309,36 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     const aCanvas = annotationCanvasRef.current;
     if (!dCanvas || !aCanvas) return;
 
-    const merged = document.createElement("canvas");
-    merged.width = dCanvas.width;
-    merged.height = dCanvas.height;
-    const ctx = merged.getContext("2d")!;
-    ctx.drawImage(dCanvas, 0, 0);
-    ctx.drawImage(aCanvas, 0, 0);
+    try {
+      // Re-draw diagram directly onto a fresh canvas to avoid tainted-canvas issues
+      // from SVG blob URLs by using the current diagram canvas pixels directly.
+      const merged = document.createElement("canvas");
+      merged.width = dCanvas.width;
+      merged.height = dCanvas.height;
+      const ctx = merged.getContext("2d")!;
 
-    const url = merged.toDataURL("image/png");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `whiteboard-${new Date().toISOString().slice(0, 10)}.png`;
-    a.click();
+      // Draw background fill first
+      ctx.fillStyle = bgRef.current;
+      ctx.fillRect(0, 0, merged.width, merged.height);
+
+      // Composite diagram layer then annotation layer
+      ctx.drawImage(dCanvas, 0, 0);
+      ctx.drawImage(aCanvas, 0, 0);
+
+      merged.toBlob((blob) => {
+        if (!blob) { console.error("[saveAsPng] toBlob returned null"); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `whiteboard-${new Date().toISOString().slice(0, 10)}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }, "image/png");
+    } catch (err) {
+      console.error("[saveAsPng] failed:", err);
+    }
   }
 
   // ─── Pointer helpers ──────────────────────────────────────────────────────
