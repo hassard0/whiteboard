@@ -90,15 +90,14 @@ Make this script detailed enough that a new SE could pick it up and run the demo
         "Content-Type": "application/json",
         Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
       },
-      body: JSON.stringify({
-        model: "openai/gpt-5-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-          temperature: 0.7,
-          max_completion_tokens: 2500,
-      }),
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          max_tokens: 2500,
+        }),
     });
 
     if (!aiResponse.ok) {
@@ -107,7 +106,8 @@ Make this script detailed enough that a new SE could pick it up and run the demo
     }
 
     const aiData = await aiResponse.json();
-    const script = aiData.choices?.[0]?.message?.content || "Script generation failed.";
+    console.log("AI response structure:", JSON.stringify(aiData).slice(0, 500));
+    const script = aiData.choices?.[0]?.message?.content || aiData.choices?.[0]?.text || "Script generation failed.";
 
     return new Response(JSON.stringify({ script, templateName }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
