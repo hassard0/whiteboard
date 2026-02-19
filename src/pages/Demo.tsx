@@ -608,15 +608,17 @@ export default function DemoPage() {
                         className="h-20 w-20 object-contain"
                         onError={(e) => {
                           const el = e.currentTarget as HTMLImageElement;
-                          // Check for known companies and use local assets
-                          const name = (customDemo.customerName || "").toLowerCase();
-                          if (name.includes("lululemon")) {
-                            el.src = "/logos/lululemon.svg";
-                          } else {
-                            el.src = "https://cdn.auth0.com/quantum-assets/dist/1.0.3/favicons/auth0-favicon-ondark.png";
-                            el.className = "h-12 w-12 object-contain";
-                          }
+                          el.src = "https://cdn.auth0.com/quantum-assets/dist/1.0.3/favicons/auth0-favicon-ondark.png";
+                          el.className = "h-12 w-12 object-contain";
                         }}
+                      />
+                    </div>
+                  ) : customDemo?.customerName ? (
+                    <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-2xl overflow-hidden" style={{ backgroundColor: `${template.color}12` }}>
+                      <img
+                        src="https://cdn.auth0.com/quantum-assets/dist/1.0.3/favicons/auth0-favicon-ondark.png"
+                        alt={customDemo.customerName}
+                        className="h-12 w-12 object-contain"
                       />
                     </div>
                   ) : (
