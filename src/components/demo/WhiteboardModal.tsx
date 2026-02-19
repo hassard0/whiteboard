@@ -4,7 +4,7 @@ export const renderedSvgCache: Record<string, string> = {};
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown, Minus, Plus, Wand2, Download, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { renderMermaid } from "@/lib/mermaid-queue";
+import { renderMermaid, setMermaidTheme } from "@/lib/mermaid-queue";
 import { supabase } from "@/integrations/supabase/client";
 import { useTheme } from "next-themes";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -118,6 +118,36 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose, showMagicModal]);
+
+  // ─── Re-render diagrams when theme changes ───────────────────────────────
+  useEffect(() => {
+    const mode = resolvedTheme === "light" ? "light" : "dark";
+    setMermaidTheme(mode);
+    // Clear the SVG store so all diagrams re-render with new theme colours
+    setSvgStore({});
+    // Reset the global cache too
+    Object.keys(renderedSvgCache).forEach((k) => delete renderedSvgCache[k]);
+    // Update canvas background to match new theme
+    setBg(mode === "light" ? BG_OPTIONS[4].value : BG_OPTIONS[0].value);
+    // Re-render all known diagrams (prop + custom)
+    const allKnown = [...allDiagramsRef.current];
+    let delay = 0;
+    allKnown.forEach((d) => {
+      if (!d.diagram) return;
+      renderingRef.current.add(d.id);
+      setTimeout(() => {
+        renderMermaid(d.diagram!)
+          .then((svg) => {
+            renderedSvgCache[d.id] = svg;
+            setSvgStore((prev) => ({ ...prev, [d.id]: svg }));
+          })
+          .catch(console.error)
+          .finally(() => renderingRef.current.delete(d.id));
+      }, delay);
+      delay += 100;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedTheme]);
 
   // ─── Pre-render ALL uncached diagrams on mount ───────────────────────────
   useEffect(() => {
