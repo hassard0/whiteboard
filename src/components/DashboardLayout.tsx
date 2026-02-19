@@ -15,7 +15,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <SidebarProvider defaultOpen={false}>
-      <div className="flex min-h-screen w-full bg-background">
+      <div className="flex min-h-screen w-full bg-background relative">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
           {/* Header */}
