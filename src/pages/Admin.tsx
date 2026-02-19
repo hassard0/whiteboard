@@ -26,10 +26,11 @@ import { Label } from "@/components/ui/label";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useNavigate } from "react-router-dom";
 import {
-  Users, Plus, Mail, Pencil, Trash2, Search, RefreshCw, UserPlus, ShieldAlert,
+  Users, Plus, Mail, Pencil, Trash2, Search, RefreshCw, UserPlus, ShieldAlert, ShieldCheck, Shield,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -54,8 +55,6 @@ async function callAdminApi(
   action: string,
   body?: object
 ) {
-  // Requesting with audience forces Auth0 to return a real JWT (with sub claim)
-  // instead of an opaque token — required for server-side admin verification
   const token = await getAccessToken({
     authorizationParams: {
       audience: AUTH0_MGMT_AUDIENCE,
@@ -76,14 +75,29 @@ async function callAdminApi(
   return data;
 }
 
+function formatLastLogin(dateStr?: string) {
+  if (!dateStr) return "Never";
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays === 0) return "Today " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
 export default function AdminPage() {
   const { getAccessTokenSilently } = useAuth0();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const navigate = useNavigate();
 
   const [users, setUsers] = useState<Auth0User[]>([]);
+  const [adminSubs, setAdminSubs] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [promotingId, setPromotingId] = useState<string | null>(null);
 
   // Modals
   const [createOpen, setCreateOpen] = useState(false);
@@ -97,17 +111,25 @@ export default function AdminPage() {
   const [formPassword, setFormPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const loadAdminRoles = useCallback(async () => {
+    const { data } = await supabase.from("user_roles").select("auth0_sub").eq("role", "admin");
+    if (data) setAdminSubs(new Set(data.map((r) => r.auth0_sub)));
+  }, []);
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await callAdminApi(getAccessTokenSilently, "GET", "list");
-      setUsers(data.users || data);
+      const [apiData] = await Promise.all([
+        callAdminApi(getAccessTokenSilently, "GET", "list"),
+        loadAdminRoles(),
+      ]);
+      setUsers(apiData.users || apiData);
     } catch (err: any) {
       toast({ title: "Failed to load users", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [getAccessTokenSilently]);
+  }, [getAccessTokenSilently, loadAdminRoles]);
 
   useEffect(() => {
     if (!adminLoading && !isAdmin) navigate("/");
@@ -115,6 +137,36 @@ export default function AdminPage() {
   }, [isAdmin, adminLoading]);
 
   const resetForm = () => { setFormEmail(""); setFormName(""); setFormPassword(""); };
+
+  const handleToggleAdmin = async (u: Auth0User) => {
+    const isCurrentlyAdmin = adminSubs.has(u.user_id);
+    setPromotingId(u.user_id);
+    try {
+      if (isCurrentlyAdmin) {
+        // Revoke admin
+        const { error } = await supabase
+          .from("user_roles")
+          .delete()
+          .eq("auth0_sub", u.user_id)
+          .eq("role", "admin");
+        if (error) throw error;
+        setAdminSubs((prev) => { const next = new Set(prev); next.delete(u.user_id); return next; });
+        toast({ title: "Admin revoked", description: `${u.email} is no longer an admin.` });
+      } else {
+        // Promote to admin
+        const { error } = await supabase
+          .from("user_roles")
+          .insert({ auth0_sub: u.user_id, role: "admin" });
+        if (error) throw error;
+        setAdminSubs((prev) => new Set([...prev, u.user_id]));
+        toast({ title: "Admin granted", description: `${u.email} is now an admin.` });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setPromotingId(null);
+    }
+  };
 
   const handleCreate = async () => {
     setSubmitting(true);
@@ -223,7 +275,7 @@ export default function AdminPage() {
               <span className="text-sm text-muted-foreground">Admin Area</span>
             </div>
             <h1 className="text-3xl font-semibold tracking-tight text-foreground">User Management</h1>
-            <p className="mt-1 text-muted-foreground">Manage Auth0 users for this application.</p>
+            <p className="mt-1 text-muted-foreground">Manage Auth0 users and admin roles for this application.</p>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -259,7 +311,7 @@ export default function AdminPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
             { label: "Total Users", value: users.length, icon: Users },
-            { label: "Verified", value: users.filter(u => u.email_verified).length, icon: UserPlus },
+            { label: "Admins", value: adminSubs.size, icon: ShieldCheck },
             { label: "Active (30d)", value: users.filter(u => u.last_login && new Date(u.last_login) > new Date(Date.now() - 30 * 86400000)).length, icon: RefreshCw },
             { label: "Blocked", value: users.filter(u => u.blocked).length, icon: ShieldAlert },
           ].map((stat, i) => (
@@ -304,67 +356,95 @@ export default function AdminPage() {
               <p className="py-12 text-center text-muted-foreground">No users found.</p>
             ) : (
               <div className="divide-y divide-border/50">
-                {filteredUsers.map((u, i) => (
-                  <motion.div
-                    key={u.user_id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.03 }}
-                    className="flex items-center gap-4 px-6 py-4 hover:bg-accent/30 transition-colors"
-                  >
-                    {/* Avatar */}
-                    <div className="h-9 w-9 rounded-full overflow-hidden bg-primary/20 shrink-0 flex items-center justify-center">
-                      {u.picture ? (
-                        <img src={u.picture} alt={u.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <span className="text-sm font-medium text-primary">
-                          {(u.name || u.email || "?")[0].toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{u.name || "—"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                    </div>
-                    {/* Badges */}
-                    <div className="hidden md:flex items-center gap-2 shrink-0">
-                      {u.email_verified ? (
-                        <Badge variant="secondary" className="text-xs">Verified</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">Unverified</Badge>
-                      )}
-                      {u.blocked && <Badge variant="destructive" className="text-xs">Blocked</Badge>}
-                    </div>
-                    {/* Last login */}
-                    <p className="hidden lg:block text-xs text-muted-foreground shrink-0 w-28 text-right">
-                      {u.last_login ? new Date(u.last_login).toLocaleDateString() : "Never"}
-                    </p>
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                          setEditUser(u);
-                          setFormName(u.name || "");
-                          setFormEmail(u.email || "");
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => setDeleteUser(u)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </motion.div>
-                ))}
+                {filteredUsers.map((u, i) => {
+                  const userIsAdmin = adminSubs.has(u.user_id);
+                  return (
+                    <motion.div
+                      key={u.user_id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: i * 0.03 }}
+                      className="flex items-center gap-4 px-6 py-4 hover:bg-accent/30 transition-colors"
+                    >
+                      {/* Avatar */}
+                      <div className="h-9 w-9 rounded-full overflow-hidden bg-primary/20 shrink-0 flex items-center justify-center">
+                        {u.picture ? (
+                          <img src={u.picture} alt={u.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-sm font-medium text-primary">
+                            {(u.name || u.email || "?")[0].toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{u.name || "—"}</p>
+                        <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                      </div>
+                      {/* Badges */}
+                      <div className="hidden md:flex items-center gap-2 shrink-0">
+                        {userIsAdmin && (
+                          <Badge className="text-xs gap-1 bg-primary/15 text-primary border-primary/30 border">
+                            <ShieldCheck className="h-3 w-3" /> Admin
+                          </Badge>
+                        )}
+                        {u.email_verified ? (
+                          <Badge variant="secondary" className="text-xs">Verified</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">Unverified</Badge>
+                        )}
+                        {u.blocked && <Badge variant="destructive" className="text-xs">Blocked</Badge>}
+                      </div>
+                      {/* Last login */}
+                      <div className="hidden lg:block text-right shrink-0 w-28">
+                        <p className="text-xs text-muted-foreground">{formatLastLogin(u.last_login)}</p>
+                        {u.logins_count !== undefined && (
+                          <p className="text-xs text-muted-foreground/60">{u.logins_count} logins</p>
+                        )}
+                      </div>
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {/* Promote / Revoke admin */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-8 w-8 ${userIsAdmin ? "text-primary hover:text-destructive" : "text-muted-foreground hover:text-primary"}`}
+                          title={userIsAdmin ? "Revoke admin" : "Promote to admin"}
+                          disabled={promotingId === u.user_id}
+                          onClick={() => handleToggleAdmin(u)}
+                        >
+                          {promotingId === u.user_id ? (
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          ) : userIsAdmin ? (
+                            <ShieldCheck className="h-4 w-4" />
+                          ) : (
+                            <Shield className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            setEditUser(u);
+                            setFormName(u.name || "");
+                            setFormEmail(u.email || "");
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeleteUser(u)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
           </CardContent>
