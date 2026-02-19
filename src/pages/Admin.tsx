@@ -46,22 +46,17 @@ interface Auth0User {
   blocked?: boolean;
 }
 
-// Hardcoded — Auth0 Management API audience for this tenant
-const AUTH0_MGMT_AUDIENCE = "https://ian-h0001.us.auth0.com/api/v2/";
-// App audience — ensures Auth0 returns a JWT (not an opaque token)
-const AUTH0_APP_AUDIENCE = "https://ian-h0001.us.auth0.com/api/v2/";
-
-// Role actions use app audience (needs a decodable JWT, not mgmt token)
-const ROLE_ACTIONS = ["set-role"];
-
 async function callAdminApi(
   getAccessToken: (opts?: object) => Promise<string>,
   method: string,
   action: string,
   body?: object
 ) {
-  const audience = ROLE_ACTIONS.includes(action) ? AUTH0_APP_AUDIENCE : AUTH0_MGMT_AUDIENCE;
-  const token = await getAccessToken({ authorizationParams: { audience } });
+  // Use default audience (no audience param) so Auth0 returns a standard
+  // 3-part JWT for ALL users — no consent required. The edge function uses
+  // its own M2M credentials for the Management API, so we only need a
+  // decodable JWT here for identity verification.
+  const token = await getAccessToken();
   const url = `${SUPABASE_URL}/functions/v1/admin-users?action=${action}`;
   const res = await fetch(url, {
     method,
