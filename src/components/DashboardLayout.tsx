@@ -4,6 +4,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { LogOut } from "lucide-react";
 import auth0Logo from "@/assets/auth0-logo-full-white.png";
+import { ThemeToggle } from "@/components/ThemeToggle";
+
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -23,8 +25,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="flex items-center gap-2.5">
               <img src={auth0Logo} alt="Auth0 by Okta" className="h-5" />
             </div>
-            <div className="ml-auto flex items-center gap-4">
+            <div className="ml-auto flex items-center gap-3">
               <span className="text-sm text-muted-foreground hidden sm:block">{user?.email}</span>
+              <ThemeToggle />
               <Button
                 variant="ghost"
                 size="sm"
