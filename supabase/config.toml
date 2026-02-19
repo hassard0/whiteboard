@@ -1,10 +1,1 @@
-project_id = "juaztmtwobldemedoekp"
-
-[functions.sync-profile]
-verify_jwt = false
-
-[functions.demo-chat]
-verify_jwt = false
-
-[functions.admin-users]
-verify_jwt = false
+project_id = "bnxpgqvsrghogqryercf"
