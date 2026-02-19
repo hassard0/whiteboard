@@ -49,7 +49,7 @@ export default function Dashboard() {
   const loadPublicDemos = useCallback(async () => {
     const { data } = await supabase
       .from("demo_environments")
-      .select("*")
+      .select("*, profiles(name, email)")
       .eq("env_type", "custom")
       .order("created_at", { ascending: false });
     if (data) {
@@ -395,7 +395,7 @@ export default function Dashboard() {
                               <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
                             ))}
                           </div>
-                          <div className="mt-auto pt-4">
+                          <div className="mt-auto pt-4 flex items-end justify-between">
                             <Button
                               size="sm"
                               className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
@@ -403,6 +403,9 @@ export default function Dashboard() {
                             >
                               Launch Demo
                             </Button>
+                            <span className="text-[10px] text-muted-foreground/60">
+                              Created by: <span className="font-medium">{user?.name || user?.email || "You"}</span>
+                            </span>
                           </div>
                         </CardContent>
                       </Card>
@@ -527,7 +530,7 @@ function PublicDemosSection({
                         <Badge key={f.id} variant="secondary" className="text-xs">{f.name}</Badge>
                       ))}
                     </div>
-                    <div className="mt-auto pt-4">
+                    <div className="mt-auto pt-4 flex items-end justify-between">
                       <Button
                         size="sm"
                         className="rounded-full bg-foreground text-background hover:bg-foreground/90 text-xs px-4"
@@ -535,6 +538,9 @@ function PublicDemosSection({
                       >
                         Launch Demo
                       </Button>
+                      <span className="text-[10px] text-muted-foreground/60">
+                        Created by: <span className="font-medium">{(demo.profiles as any)?.name || (demo.profiles as any)?.email || "Unknown"}</span>
+                      </span>
                     </div>
                   </CardContent>
                 </Card>
