@@ -142,22 +142,15 @@ export default function AdminPage() {
     const isCurrentlyAdmin = adminSubs.has(u.user_id);
     setPromotingId(u.user_id);
     try {
+      await callAdminApi(getAccessTokenSilently, "POST", "set-role", {
+        userId: u.user_id,
+        role: "admin",
+        grant: !isCurrentlyAdmin,
+      });
       if (isCurrentlyAdmin) {
-        // Revoke admin
-        const { error } = await supabase
-          .from("user_roles")
-          .delete()
-          .eq("auth0_sub", u.user_id)
-          .eq("role", "admin");
-        if (error) throw error;
         setAdminSubs((prev) => { const next = new Set(prev); next.delete(u.user_id); return next; });
         toast({ title: "Admin revoked", description: `${u.email} is no longer an admin.` });
       } else {
-        // Promote to admin
-        const { error } = await supabase
-          .from("user_roles")
-          .insert({ auth0_sub: u.user_id, role: "admin" });
-        if (error) throw error;
         setAdminSubs((prev) => new Set([...prev, u.user_id]));
         toast({ title: "Admin granted", description: `${u.email} is now an admin.` });
       }
