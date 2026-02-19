@@ -44,6 +44,7 @@ export function Auth0ProviderWrapper({ children }: { children: React.ReactNode }
       clientId={config.clientId}
       authorizationParams={{
         redirect_uri: window.location.origin,
+        audience: `https://${config.domain.replace(/^https?:\/\//, "")}/api/v2/`,
       }}
       cacheLocation="localstorage"
     >
