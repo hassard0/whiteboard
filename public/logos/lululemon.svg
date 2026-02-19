@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 80" fill="none">
+  <!-- Lululemon "A" omega mark -->
+  <g transform="translate(8, 8)">
+    <circle cx="32" cy="32" r="32" fill="#000"/>
+    <!-- Stylized A/horseshoe inside circle -->
+    <path d="M32 12 C20 12 14 22 14 32 C14 38 17 43 21 46 L21 50 L27 50 L27 44 C25 42 23 38 23 32 C23 24 27 19 32 19 C37 19 41 24 41 32 C41 38 39 42 37 44 L37 50 L43 50 L43 46 C47 43 50 38 50 32 C50 22 44 12 32 12Z" fill="#fff"/>
+  </g>
+  <!-- lululemon text -->
+  <text x="86" y="52" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="32" font-weight="400" fill="#000" letter-spacing="-0.5">lululemon</text>
+</svg>
