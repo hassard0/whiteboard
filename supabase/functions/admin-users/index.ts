@@ -207,6 +207,31 @@ serve(async (req) => {
       });
     }
 
+    // ── SET ROLE ──
+    if (req.method === "POST" && action === "set-role") {
+      const body = await req.json();
+      const { userId, role, grant } = body; // grant: true = add, false = remove
+      if (!userId || !role) throw new Error("userId and role required");
+
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      if (grant) {
+        const { error } = await supabase
+          .from("user_roles")
+          .upsert({ auth0_sub: userId, role }, { onConflict: "auth0_sub,role", ignoreDuplicates: true });
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase
+          .from("user_roles")
+          .delete()
+          .eq("auth0_sub", userId)
+          .eq("role", role);
+        if (error) throw new Error(error.message);
+      }
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
