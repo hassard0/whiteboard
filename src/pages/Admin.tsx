@@ -52,11 +52,12 @@ async function callAdminApi(
   action: string,
   body?: object
 ) {
-  // Use default audience (no audience param) so Auth0 returns a standard
-  // 3-part JWT for ALL users — no consent required. The edge function uses
-  // its own M2M credentials for the Management API, so we only need a
-  // decodable JWT here for identity verification.
-  const token = await getAccessToken();
+  // Must pass an audience so Auth0 returns a 3-part JWT instead of an opaque token.
+  // The edge function only needs to decode the `sub` claim for identity verification —
+  // it uses its own M2M credentials for the actual Management API calls.
+  const token = await getAccessToken({
+    authorizationParams: { audience: "https://ian-h0001.us.auth0.com/api/v2/" },
+  });
   const url = `${SUPABASE_URL}/functions/v1/admin-users?action=${action}`;
   const res = await fetch(url, {
     method,
