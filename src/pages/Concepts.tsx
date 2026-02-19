@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { cn } from "@/lib/utils";
-import { renderMermaid } from "@/lib/mermaid-queue";
+import { renderMermaid, setMermaidTheme } from "@/lib/mermaid-queue";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WhiteboardModal } from "@/components/demo/WhiteboardModal";
+import { useTheme } from "next-themes";
 import {
   Shield, Key, UserCheck, ArrowRightLeft, FileText, User,
   Plane, Briefcase, ShoppingBag, Code, Wrench,
@@ -18,15 +19,13 @@ import {
 // Shared SVG cache so whiteboard can reuse rendered SVGs
 export const renderedSvgCache: Record<string, string> = {};
 
-function MermaidDiagram({ diagram, cacheKey }: { diagram: string; cacheKey?: string }) {
-  const [svg, setSvg] = useState<string>(cacheKey ? (renderedSvgCache[cacheKey] ?? "") : "");
+function MermaidDiagram({ diagram, cacheKey, themeVersion }: { diagram: string; cacheKey?: string; themeVersion?: number }) {
+  const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (cacheKey && renderedSvgCache[cacheKey]) {
-      setSvg(renderedSvgCache[cacheKey]);
-      return;
-    }
+    setError(false);
+    setSvg("");
     let cancelled = false;
     renderMermaid(diagram)
       .then((rendered) => {
@@ -39,7 +38,8 @@ function MermaidDiagram({ diagram, cacheKey }: { diagram: string; cacheKey?: str
         if (!cancelled) setError(true);
       });
     return () => { cancelled = true; };
-  }, [diagram, cacheKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagram, cacheKey, themeVersion]);
 
   if (error) {
     return (
@@ -64,7 +64,7 @@ function MermaidDiagram({ diagram, cacheKey }: { diagram: string; cacheKey?: str
 }
 
 // ─── Fullscreen Modal ───
-function DiagramModal({ diagram, title, onClose }: { diagram: string; title: string; onClose: () => void }) {
+function DiagramModal({ diagram, title, onClose, themeVersion }: { diagram: string; title: string; onClose: () => void; themeVersion?: number }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
@@ -108,7 +108,7 @@ function DiagramModal({ diagram, title, onClose }: { diagram: string; title: str
 
           {/* Diagram */}
           <div className="p-8 overflow-auto max-h-[80vh]">
-            <MermaidDiagram diagram={diagram} />
+            <MermaidDiagram diagram={diagram} themeVersion={themeVersion} />
           </div>
         </motion.div>
       </motion.div>
@@ -381,6 +381,18 @@ export default function Concepts() {
   const [activeTab, setActiveTab] = useState("concepts");
   const [modalDiagram, setModalDiagram] = useState<{ diagram: string; title: string } | null>(null);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
+  const [themeVersion, setThemeVersion] = useState(0);
+  const { resolvedTheme } = useTheme();
+
+  // Re-initialize mermaid and re-render all diagrams when theme changes
+  useEffect(() => {
+    const mode = resolvedTheme === "light" ? "light" : "dark";
+    setMermaidTheme(mode, () => {
+      // Clear the SVG cache so diagrams re-render with new theme colours
+      Object.keys(renderedSvgCache).forEach((k) => delete renderedSvgCache[k]);
+    });
+    setThemeVersion((v) => v + 1);
+  }, [resolvedTheme]);
 
   // Stable diagram list — re-compute only when whiteboard opens so the cache is fresh
   const whiteboardDiagrams = useMemo(
@@ -391,6 +403,7 @@ export default function Concepts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [whiteboardOpen] // re-seed cache hits when modal opens
   );
+
 
   return (
     <DashboardLayout>
@@ -473,7 +486,7 @@ export default function Concepts() {
                               </div>
                               <Maximize2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
-                            <MermaidDiagram diagram={concept.diagram} cacheKey={concept.id} />
+                            <MermaidDiagram diagram={concept.diagram} cacheKey={concept.id} themeVersion={themeVersion} />
                           </div>
 
                           {/* How it works steps */}
@@ -600,7 +613,7 @@ export default function Concepts() {
                             <span className="text-xs text-muted-foreground font-mono">Authorization Flow</span>
                           </div>
                           <div className="rounded-xl border border-border/40 bg-background/60 p-5">
-                            <MermaidDiagram diagram={demo.diagram} cacheKey={demo.id} />
+                            <MermaidDiagram diagram={demo.diagram} cacheKey={demo.id} themeVersion={themeVersion} />
                           </div>
 
                           {/* Legend */}
@@ -635,6 +648,7 @@ export default function Concepts() {
           diagram={modalDiagram.diagram}
           title={modalDiagram.title}
           onClose={() => setModalDiagram(null)}
+          themeVersion={themeVersion}
         />
       )}
 
