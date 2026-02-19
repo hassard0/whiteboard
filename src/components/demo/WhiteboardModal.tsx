@@ -63,6 +63,8 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   const [tool, setTool] = useState<Tool>("draw");
   const [color, setColor] = useState(PALETTE[0].value);
   const [bg, setBg] = useState(() => isLight ? BG_OPTIONS[4].value : BG_OPTIONS[0].value);
+  // Remember draw settings so we can restore them when leaving highlight mode
+  const prevDrawSettings = useRef<{ color: string; strokeWidth: number } | null>(null);
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [isDrawing, setIsDrawing] = useState(false);
   const [showBgPicker, setShowBgPicker] = useState(false);
@@ -575,7 +577,17 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
                 <button
                   key={btn.id}
                   title={btn.label}
-                  onClick={() => setTool(btn.id)}
+                  onClick={() => {
+                    if (btn.id === "highlight") {
+                      prevDrawSettings.current = { color, strokeWidth };
+                      setColor("hsl(54 100% 50%)");
+                      setStrokeWidth(14);
+                    } else if (tool === "highlight" && prevDrawSettings.current) {
+                      setColor(prevDrawSettings.current.color);
+                      setStrokeWidth(prevDrawSettings.current.strokeWidth);
+                    }
+                    setTool(btn.id);
+                  }}
                   className={cn(
                     "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
                     tool === btn.id
