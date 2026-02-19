@@ -145,7 +145,7 @@ export default function BuilderPage() {
             </Button>
             <div>
               <div className="flex items-center gap-2">
-                <img src={auth0Shield} alt="Auth0" className="h-5 w-5 invert" />
+                <img src={auth0Shield} alt="Auth0" className="h-5 w-5 brightness-0 dark:invert" />
                 <h1 className="text-sm font-semibold text-foreground">Builder Mode</h1>
               </div>
               <span className="text-xs text-muted-foreground">{baseTemplate.name}</span>
