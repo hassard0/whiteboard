@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { renderedSvgCache } from "@/pages/Concepts";
+// Local SVG cache — exported so WhiteboardPage can seed pre-rendered diagrams
+export const renderedSvgCache: Record<string, string> = {};
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown, Minus, Plus, Wand2, Download, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -494,17 +495,13 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
       >
-        {/* Overlay */}
-        <div className="absolute inset-0 bg-background/95 backdrop-blur-md" onClick={onClose} />
-
-        {/* Modal */}
+        {/* Fullscreen whiteboard — no overlay or modal chrome */}
         <motion.div
-          className="relative z-10 flex flex-col w-full h-full max-w-[1400px] max-h-[95vh] m-auto rounded-2xl border border-border/60 bg-card shadow-2xl overflow-hidden"
-          initial={{ scale: 0.94, opacity: 0 }}
+          className="relative z-10 flex flex-col w-full h-full bg-card overflow-hidden"
+          initial={{ scale: 0.98, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.94, opacity: 0 }}
+          exit={{ scale: 0.98, opacity: 0 }}
           transition={{ type: "spring", stiffness: 320, damping: 30 }}
-          onClick={(e) => e.stopPropagation()}
         >
           {/* ── Toolbar ── */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-card/80 flex-wrap">
@@ -745,17 +742,11 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
               <span className="hidden sm:inline">Save PNG</span>
             </button>
 
-            {/* Spacer + hint + Close */}
+            {/* Spacer + hint */}
             <div className="ml-auto flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground hidden md:block">
                 Scroll to zoom · right-drag to pan
               </span>
-              <button
-                onClick={onClose}
-                className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
           </div>
 
