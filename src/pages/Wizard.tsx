@@ -366,7 +366,7 @@ export default function WizardPage() {
             <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <img src={auth0Shield} alt="Auth0" className="h-5 w-5 invert" />
+            <img src={auth0Shield} alt="Auth0" className="h-5 w-5 brightness-0 dark:invert" />
             <div>
               <h1 className="text-sm font-semibold text-foreground">Demo Wizard</h1>
               <span className="text-xs text-muted-foreground">{editingDemo ? `Editing: ${state.name || "Demo"}` : "Create a custom demo"}</span>
