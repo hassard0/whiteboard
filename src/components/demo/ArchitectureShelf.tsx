@@ -70,11 +70,11 @@ export function ArchitectureShelf({ templateName, activeFeatures, lastToolCall, 
   ];
 
   const connections = [
-    { from: "user", to: "auth0", label: "Login / Consent", protocol: "OAuth 2.0 + PKCE" },
-    { from: "auth0", to: "agent", label: "Scoped Token", protocol: "JWT with FGA claims" },
-    { from: "agent", to: "tools", label: "Tool Call", protocol: "Function Calling" },
+    { from: "user", to: "auth0", label: "Auth Code + PKCE", protocol: "Authorization Grant" },
+    { from: "auth0", to: "agent", label: "Access Token (JWT)", protocol: "Bearer · scopes + sub" },
+    { from: "agent", to: "tools", label: "FGA Policy Check", protocol: "Scope Enforcement" },
     { from: "tools", to: "vault", label: "Token Exchange", protocol: "RFC 8693" },
-    { from: "vault", to: "data", label: "Delegated Access", protocol: "Scoped Bearer Token" },
+    { from: "vault", to: "data", label: "Delegated Credential", protocol: "3rd-party API Token" },
   ];
 
   return (
