@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { renderMermaid } from "@/lib/mermaid-queue";
 import { supabase } from "@/integrations/supabase/client";
 import { useTheme } from "next-themes";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -742,11 +743,12 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
               <span className="hidden sm:inline">Save PNG</span>
             </button>
 
-            {/* Spacer + hint */}
+            {/* Spacer + hint + theme toggle */}
             <div className="ml-auto flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground hidden md:block">
                 Scroll to zoom · right-drag to pan
               </span>
+              <ThemeToggle />
             </div>
           </div>
 
