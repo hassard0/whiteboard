@@ -48,8 +48,10 @@ interface Auth0User {
 
 // Hardcoded — Auth0 Management API audience for this tenant
 const AUTH0_MGMT_AUDIENCE = "https://ian-h0001.us.auth0.com/api/v2/";
+// App audience — ensures Auth0 returns a JWT (not an opaque token)
+const AUTH0_APP_AUDIENCE = "https://ian-h0001.us.auth0.com/api/v2/";
 
-// Role actions only need the user's own Auth0 token (no mgmt audience)
+// Role actions use app audience (needs a decodable JWT, not mgmt token)
 const ROLE_ACTIONS = ["set-role"];
 
 async function callAdminApi(
@@ -58,12 +60,8 @@ async function callAdminApi(
   action: string,
   body?: object
 ) {
-  const needsMgmtAudience = !ROLE_ACTIONS.includes(action);
-  const token = await getAccessToken(
-    needsMgmtAudience
-      ? { authorizationParams: { audience: AUTH0_MGMT_AUDIENCE } }
-      : {}
-  );
+  const audience = ROLE_ACTIONS.includes(action) ? AUTH0_APP_AUDIENCE : AUTH0_MGMT_AUDIENCE;
+  const token = await getAccessToken({ authorizationParams: { audience } });
   const url = `${SUPABASE_URL}/functions/v1/admin-users?action=${action}`;
   const res = await fetch(url, {
     method,
