@@ -521,7 +521,7 @@ export default function DemoPage() {
           <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <img src={auth0Shield} alt="Auth0" className="h-6 w-6 invert" />
+          <img src={auth0Shield} alt="Auth0" className="h-6 w-6 brightness-0 dark:invert" />
           <div>
             <h1 className="text-base font-semibold text-foreground">{template.name}</h1>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">

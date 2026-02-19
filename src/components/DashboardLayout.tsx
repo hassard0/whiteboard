@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { LogOut } from "lucide-react";
-import auth0Shield from "@/assets/auth0-shield.svg";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 
@@ -22,9 +21,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           {/* Header */}
           <header className="border-b border-border/50 h-16 flex items-center px-4 gap-4 shrink-0">
             <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
-            <div className="flex items-center gap-2.5">
-              <img src={auth0Shield} alt="Auth0" className="h-6 brightness-0 dark:invert" />
-            </div>
             <div className="ml-auto flex items-center gap-3">
               <span className="text-sm text-muted-foreground hidden sm:block">{user?.email}</span>
               <ThemeToggle />

@@ -31,7 +31,7 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r border-border/50" collapsible="icon">
       <div className="flex h-16 items-center px-4 border-b border-border/50">
-        <img src={auth0Shield} alt="Auth0" className="h-7 w-7 shrink-0" />
+        <img src={auth0Shield} alt="Auth0" className="h-7 w-7 shrink-0 brightness-0 dark:invert" />
         <span className="ml-2.5 text-sm font-semibold tracking-tight text-foreground truncate group-data-[collapsible=icon]:hidden">
           Auth0 for AI Agents
         </span>

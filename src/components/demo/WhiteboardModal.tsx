@@ -5,6 +5,7 @@ import { X, Pencil, Highlighter, Trash2, Palette, ChevronDown, Minus, Plus, Wand
 import { cn } from "@/lib/utils";
 import { renderMermaid } from "@/lib/mermaid-queue";
 import { supabase } from "@/integrations/supabase/client";
+import { useTheme } from "next-themes";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ const PALETTE = [
   { label: "Coral",   value: "hsl(0 72% 65%)"   },
   { label: "Sky",     value: "hsl(200 70% 60%)"  },
   { label: "Green",   value: "hsl(142 60% 55%)"  },
-  { label: "White",   value: "hsl(0 0% 95%)"     },
+  { label: "Black",   value: "hsl(0 0% 10%)"     },
   { label: "Orange",  value: "hsl(25 90% 58%)"   },
 ];
 
@@ -50,6 +51,9 @@ const MAX_ZOOM = 4;
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === "light";
+
   // Two-canvas approach: bottom = diagram (redrawn on zoom/bg changes), top = annotations (user strokes)
   const diagramCanvasRef = useRef<HTMLCanvasElement>(null);
   const annotationCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -58,7 +62,7 @@ export function WhiteboardModal({ diagrams, onClose }: WhiteboardModalProps) {
   const [selectedDiagramIdx, setSelectedDiagramIdx] = useState(0);
   const [tool, setTool] = useState<Tool>("draw");
   const [color, setColor] = useState(PALETTE[0].value);
-  const [bg, setBg] = useState(BG_OPTIONS[0].value);
+  const [bg, setBg] = useState(() => isLight ? BG_OPTIONS[4].value : BG_OPTIONS[0].value);
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [isDrawing, setIsDrawing] = useState(false);
   const [showBgPicker, setShowBgPicker] = useState(false);

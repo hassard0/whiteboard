@@ -5,11 +5,8 @@
  */
 import mermaid from "mermaid";
 
-// Initialize mermaid eagerly at module load time (once, synchronously).
-mermaid.initialize({
-  startOnLoad: false,
-  theme: "dark",
-  themeVariables: {
+function getDarkVars() {
+  return {
     background: "#0a0a0f",
     primaryColor: "#6d28d9",
     primaryTextColor: "#f5f5f5",
@@ -40,16 +37,71 @@ mermaid.initialize({
     noteTextColor: "#d4c5ff",
     activationBorderColor: "#6d28d9",
     activationBkgColor: "#2d1b69",
-  },
-  flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
-  sequence: { mirrorActors: false, useMaxWidth: true },
-});
+  };
+}
+
+function getLightVars() {
+  return {
+    background: "#ffffff",
+    primaryColor: "#6d28d9",
+    primaryTextColor: "#1a1a2e",
+    primaryBorderColor: "#7c3aed",
+    lineColor: "#7c3aed",
+    secondaryColor: "#f3f0ff",
+    tertiaryColor: "#ede9fe",
+    edgeLabelBackground: "#f3f0ff",
+    clusterBkg: "#f3f0ff",
+    titleColor: "#1a1a2e",
+    nodeBorder: "#7c3aed",
+    mainBkg: "#f3f0ff",
+    nodeTextColor: "#1a1a2e",
+    fontFamily: "Inter, system-ui, sans-serif",
+    fontSize: "13px",
+    actorBkg: "#f3f0ff",
+    actorBorder: "#6d28d9",
+    actorTextColor: "#1a1a2e",
+    actorLineColor: "#6d28d9",
+    signalColor: "#6d28d9",
+    signalTextColor: "#1a1a2e",
+    labelBoxBkgColor: "#f3f0ff",
+    labelBoxBorderColor: "#6d28d9",
+    labelTextColor: "#1a1a2e",
+    loopTextColor: "#6d28d9",
+    noteBorderColor: "#6d28d9",
+    noteBkgColor: "#ede9fe",
+    noteTextColor: "#1a1a2e",
+    activationBorderColor: "#6d28d9",
+    activationBkgColor: "#ddd6fe",
+  };
+}
+
+let currentThemeMode: "dark" | "light" = "dark";
+
+function initMermaid(mode: "dark" | "light") {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: mode === "dark" ? "dark" : "default",
+    themeVariables: mode === "dark" ? getDarkVars() : getLightVars(),
+    flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
+    sequence: { mirrorActors: false, useMaxWidth: true },
+  });
+}
+
+// Initialize eagerly with dark theme
+initMermaid("dark");
+
+/** Call this whenever the app theme changes to re-initialize mermaid and clear the SVG cache. */
+export function setMermaidTheme(mode: "dark" | "light", clearCache?: () => void) {
+  if (mode === currentThemeMode) return;
+  currentThemeMode = mode;
+  initMermaid(mode);
+  clearCache?.();
+}
 
 const queue: Array<() => Promise<void>> = [];
 let processing = false;
 let counter = 0;
 
-// Wrap a promise with a timeout so a hung render never blocks the queue.
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`mermaid render timed out after ${ms}ms`)), ms);
@@ -74,10 +126,7 @@ async function flush() {
   processing = false;
 }
 
-// Sanitize common Mermaid v11 syntax issues before rendering.
 function sanitizeDiagram(text: string): string {
-  // Replace literal \n inside node shape brackets {} [] () with a space
-  // Mermaid v11 doesn't support newlines inside node labels in most cases
   return text.replace(/(\{[^}]*?)\\n([^}]*?\})/g, "$1 $2")
              .replace(/(\[[^\]]*?)\\n([^\]]*?\])/g, "$1 $2")
              .replace(/(\([^)]*?)\\n([^)]*?\))/g, "$1 $2");
@@ -88,9 +137,7 @@ export function renderMermaid(diagramText: string): Promise<string> {
   return new Promise((resolve, reject) => {
     queue.push(async () => {
       const id = `mermaid-q-${++counter}`;
-      // Clean up any leftover element from a previous attempt
       document.getElementById(id)?.remove();
-      // Create a hidden container so mermaid has a real DOM parent
       const container = document.createElement("div");
       container.id = `mermaid-container-${counter}`;
       container.style.cssText = "position:fixed;top:-9999px;left:-9999px;visibility:hidden;";
