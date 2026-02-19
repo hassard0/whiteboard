@@ -342,8 +342,11 @@ export default function Dashboard() {
                                     src={cfg.customerLogo}
                                     alt={cfg.customerName || cfg.name}
                                     className="h-8 w-8 object-contain"
-                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                                  />
+                                  onError={(e) => {
+                                    const el = e.currentTarget as HTMLImageElement;
+                                    el.src = "https://cdn.auth0.com/quantum-assets/dist/1.0.3/favicons/auth0-favicon-ondark.png";
+                                  }}
+                                />
                                 ) : (
                                   <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
                                 )}
@@ -487,7 +490,10 @@ function PublicDemosSection({
                               src={cfg.customerLogo}
                               alt={cfg.customerName || cfg.name}
                               className="h-8 w-8 object-contain"
-                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                              onError={(e) => {
+                                    const el = e.currentTarget as HTMLImageElement;
+                                    el.src = "https://cdn.auth0.com/quantum-assets/dist/1.0.3/favicons/auth0-favicon-ondark.png";
+                                  }}
                             />
                           ) : (
                             <Sparkles className="h-6 w-6" style={{ color: cfg.color || "hsl(262 83% 58%)" }} />
